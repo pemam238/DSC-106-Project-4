@@ -3,9 +3,89 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project 4</title>
+    <title>World Data Explorer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400&family=Source+Serif+4:ital,wght@0,300;0,400;1,300&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="global.css">
 </head>
 <body>
-    
+
+    <!-- Newspaper-style masthead -->
+    <header class="masthead">
+        <div class="masthead-eyebrow">DSC 106 | Final Project</div>
+        <h1 class="masthead-title">Data shows how extreme weather is <em>linked</em> to climate change</h1>
+        <div class="masthead-meta">
+            <span>By Jessica Lu, Parisa Emam, and Jamera Mellyn Fernando</span>
+            <span class="masthead-sep">·</span>
+            <span id="point-count"></span> locations tracked
+        </div>
+        <div class="masthead-rule"></div>
+    </header>
+
+    <!-- Main content: sidebar + map -->
+    <div class="layout">
+
+        <!-- Left editorial sidebar -->
+        <aside class="sidebar">
+            <p class="sidebar-lede">
+                Bubbles indicate the relative intensity of events at each location.
+                Larger circles represent higher values in the dataset.
+            </p>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Legend -->
+            <p class="sidebar-section-label">How to read this map</p>
+            <div class="legend-row">
+                <svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="4" fill="none" stroke="#c0282d" stroke-width="1.2"/></svg>
+                <span class="legend-text">Small — low value</span>
+            </div>
+            <div class="legend-row">
+                <svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="7" fill="rgba(192,40,45,0.18)" stroke="#c0282d" stroke-width="1.2"/></svg>
+                <span class="legend-text">Medium</span>
+            </div>
+            <div class="legend-row">
+                <svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="10" fill="rgba(192,40,45,0.28)" stroke="#c0282d" stroke-width="1.2"/></svg>
+                <span class="legend-text">Large — high value</span>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Selected country info (updates on click) -->
+            <div class="selected-card" id="selectedCard" style="display:none">
+                <p class="sidebar-section-label">Selected</p>
+                <div class="selected-flag" id="selectedFlag"></div>
+                <p class="selected-name" id="selectedName"></p>
+                <div class="selected-row">
+                    <span class="selected-label">Value</span>
+                    <span class="selected-value" id="selectedValue"></span>
+                </div>
+                <div class="selected-row">
+                    <span class="selected-label">Coordinates</span>
+                    <span class="selected-value" id="selectedCoords"></span>
+                </div>
+            </div>
+
+            <div class="sidebar-note">
+                Scroll or pinch to zoom. Click any bubble to see details.
+            </div>
+
+            <button class="btn-reset" id="resetBtn">↺ Reset view</button>
+        </aside>
+
+        <!-- Map area -->
+        <div id="map-container">
+            <svg id="map-svg"></svg>
+            <div class="tooltip" id="tooltip">
+                <div class="tooltip-country" id="tooltip-country"></div>
+                <div class="tooltip-value"   id="tooltip-value"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+    <script src="main.js"></script>
 </body>
 </html>

@@ -1,0 +1,276 @@
+/* ─── Reset ───────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+    --ink:          #000000;
+    --ink-muted:    #555;
+    --ink-light:    #888;
+    --ink-rule:     #d4cfc9;
+    --paper:        #ffffff;
+    --paper-tint:   #ffffff;
+    --red:          #c0282d;   /* WaPo accent red */
+    --red-soft:     rgba(192, 40, 45, 0.18);
+    --land:         #d9d4c7;
+    --land-border:  #b8b2a4;
+    --ocean:        #e8eef4;
+    --graticule:    rgba(0,0,0,0.07);
+    --font-display: 'Playfair Display', Georgia, serif;
+    --font-body:    'Source Serif 4', Georgia, serif;
+    --font-ui:      'Source Sans 3', system-ui, sans-serif;
+    --sidebar-w:    260px;
+    --masthead-h:   auto;
+}
+
+html, body {
+    height: 100%;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ─── Masthead ────────────────────────────────────── */
+.masthead {
+    padding: 22px 28px 0;
+    max-width: 100%;
+}
+
+.masthead-eyebrow {
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--red);
+    margin-bottom: 8px;
+}
+
+.masthead-title {
+    font-family: var(--font-display);
+    font-size: clamp(22px, 3vw, 34px);
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--ink);
+    max-width: 700px;
+    margin-bottom: 10px;
+}
+.masthead-title em {
+    font-style: italic;
+    font-weight: 400;
+}
+
+.masthead-meta {
+    font-family: var(--font-ui);
+    font-size: 12px;
+    color: var(--ink-muted);
+    margin-bottom: 14px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.masthead-sep { color: var(--ink-rule); }
+
+.masthead-rule {
+    border: none;
+    border-top: 2px solid var(--ink);
+    margin-bottom: 0;
+}
+
+/* ─── Layout ──────────────────────────────────────── */
+.layout {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    padding: 24px 28px;
+    gap: 24px;
+    max-height: 600px;   /* cap the whole row, not just the map */
+}
+
+/* ─── Sidebar ─────────────────────────────────────── */
+.sidebar {
+    width: var(--sidebar-w);
+    flex-shrink: 0;
+    padding: 18px 20px 18px 28px;
+    border-right: 1px solid var(--ink-rule);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    background: var(--paper);
+}
+
+.sidebar-lede {
+    font-family: var(--font-body);
+    font-size: 13.5px;
+    color: var(--ink-muted);
+    line-height: 1.65;
+    margin-bottom: 14px;
+    font-style: italic;
+}
+
+.sidebar-divider {
+    border: none;
+    border-top: 1px solid var(--ink-rule);
+    margin: 12px 0;
+}
+
+.sidebar-section-label {
+    font-family: var(--font-ui);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    margin-bottom: 10px;
+}
+
+/* Legend */
+.legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 7px;
+}
+.legend-text {
+    font-family: var(--font-ui);
+    font-size: 12px;
+    color: var(--ink-muted);
+}
+
+/* Selected card */
+.selected-card {
+    background: var(--paper-tint);
+    border: 1px solid var(--ink-rule);
+    border-radius: 2px;
+    padding: 12px;
+    margin-top: 2px;
+    margin-bottom: 12px;
+}
+.selected-flag { font-size: 28px; line-height: 1; margin-bottom: 6px; }
+.selected-name {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    color: var(--ink);
+}
+.selected-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 5px 0;
+    border-top: 1px solid var(--ink-rule);
+}
+.selected-label {
+    font-family: var(--font-ui);
+    font-size: 11px;
+    color: var(--ink-light);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+}
+.selected-value {
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.sidebar-note {
+    font-family: var(--font-ui);
+    font-size: 11px;
+    color: var(--ink-light);
+    line-height: 1.5;
+    margin-top: auto;
+    padding-top: 12px;
+}
+
+.btn-reset {
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--ink-muted);
+    background: none;
+    border: 1px solid var(--ink-rule);
+    padding: 5px 12px;
+    border-radius: 2px;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: color .15s, border-color .15s;
+    width: 100%;
+    text-align: center;
+}
+.btn-reset:hover { color: var(--red); border-color: var(--red); }
+
+/* ─── Map ─────────────────────────────────────────── */
+#map-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: var(--ocean);
+    border: 1px solid var(--ink-rule);
+    border-radius: 3px;
+}
+
+#map-svg {
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+}
+#map-svg:active { cursor: grabbing; }
+
+.sphere    { fill: var(--ocean); }
+.graticule { fill: none; stroke: var(--graticule); stroke-width: 0.5; }
+
+.country {
+    fill: var(--land);
+    stroke: var(--land-border);
+    stroke-width: 0.35;
+    transition: fill .12s;
+    cursor: pointer;
+}
+.country:hover  { fill: #c8c2b4; }
+.country.active { fill: #b8b1a2; }
+
+.bubble {
+    fill: var(--red-soft);
+    stroke: var(--red);
+    stroke-width: 1;
+    cursor: pointer;
+    transition: fill .12s;
+}
+.bubble:hover { fill: rgba(192,40,45,0.42); }
+
+/* ─── Tooltip ─────────────────────────────────────── */
+.tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: white;
+    border: 1px solid var(--ink-rule);
+    border-top: 2px solid var(--red);
+    padding: 8px 12px;
+    display: none;
+    z-index: 50;
+    white-space: nowrap;
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.06);
+    border-radius: 0;
+}
+.tooltip.visible { display: block; }
+
+.tooltip-country {
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 2px;
+}
+.tooltip-value {
+    font-family: var(--font-ui);
+    font-size: 11px;
+    color: var(--red);
+}
