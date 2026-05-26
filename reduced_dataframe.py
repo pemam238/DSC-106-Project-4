@@ -193,7 +193,34 @@ EVENTS_SUBSET = {
 
 EXPERIMENTS = ['historical', 'abrupt-4xCO2']
 
+# ═══════════════════════════════════════════════════════════════════════════
+# VERSION 1 — full (all 8 events, monthly, 5° grid)
+# ═══════════════════════════════════════════════════════════════════════════
+print("=" * 60)
+print("VERSION 1: all events, monthly resolution")
+print("=" * 60)
 
+dfs_full = {event: {} for event in EVENTS_ALL}
+
+for experiment_id in EXPERIMENTS:
+    for event_name, index_fn in EVENTS_ALL.items():
+        print(f"Building: {event_name} | {experiment_id}")
+        da = index_fn(experiment_id)
+        if da is None:
+            print(f"  [SKIP] {event_name} | {experiment_id}")
+            continue
+        result = to_tidy_full(da, event_name, experiment_id)
+        if result is not None:
+            dfs_full[event_name][experiment_id] = result
+            print(f"  [OK] {len(result):,} rows")
+
+# individual
+for event_name in EVENTS_ALL:
+    for experiment_id in EXPERIMENTS:
+        if experiment_id in dfs_full[event_name]:
+            fname = f"{event_name}_{experiment_id}_full.csv"
+            dfs_full[event_name][experiment_id].to_csv(fname, index=False)
+            print(f"  [SAVED] {fname}")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # VERSION 2 — reduced (3 events, annual means, 5° grid)
