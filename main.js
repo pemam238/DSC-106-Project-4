@@ -1,3 +1,5 @@
+console.log("main.js loaded");
+
 /* ─────────────────────────────────────────────────────
    main.js  —  Climate Extreme Weather interactive map
    D3 v7 + TopoJSON
@@ -71,7 +73,7 @@ const colorScale = d3.scaleSequential()
 function noDataColor() { return "#d9d4c7"; }
 
 // ── Data loading ─────────────────────────────────────
-const DATA_BASE = "./data/";
+const DATA_BASE = "./dataframes/";
 // Fallback: if no local data folder, we simulate with empty maps
 // so the map still renders.
 
