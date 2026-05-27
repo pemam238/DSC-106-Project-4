@@ -22,31 +22,46 @@
         <div class="masthead-rule"></div>
     </header>
 
+    <!-- Event type tabs -->
+    <div class="event-tabs-bar">
+        <span class="tabs-label">Event type:</span>
+        <div class="event-tabs" id="eventTabs">
+            <button class="event-tab active" data-event="heat">🌡 Heat</button>
+            <button class="event-tab" data-event="cyclone">🌀 Cyclone</button>
+            <button class="event-tab" data-event="drought">🏜 Drought</button>
+            <button class="event-tab" data-event="wildfire">🔥 Wildfire</button>
+            <button class="event-tab" data-event="precip">🌧 Precip</button>
+            <button class="event-tab" data-event="snow">❄ Snow</button>
+            <button class="event-tab" data-event="marine_hw">🌊 Marine HW</button>
+            <button class="event-tab" data-event="sea_level">📈 Sea Level</button>
+        </div>
+        <div class="experiment-toggle">
+            <span class="tabs-label">Scenario:</span>
+            <button class="exp-btn active" data-exp="historical">Historical</button>
+            <button class="exp-btn" data-exp="abrupt-4xCO2">4×CO₂</button>
+        </div>
+    </div>
+
     <!-- Main content: sidebar + map -->
     <div class="layout">
 
         <!-- Left editorial sidebar -->
         <aside class="sidebar">
             <p class="sidebar-lede">
-                Bubbles indicate the relative intensity of events at each location.
-                Larger circles represent higher values in the dataset.
+                Countries are shaded by <strong>intensity</strong> of the selected extreme weather event.
+                Darker shading indicates higher mean intensity for that year.
             </p>
 
             <div class="sidebar-divider"></div>
 
-            <!-- Legend -->
-            <p class="sidebar-section-label">How to read this map</p>
-            <div class="legend-row">
-                <svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="4" fill="none" stroke="#c0282d" stroke-width="1.2"/></svg>
-                <span class="legend-text">Small — low value</span>
-            </div>
-            <div class="legend-row">
-                <svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="7" fill="rgba(192,40,45,0.18)" stroke="#c0282d" stroke-width="1.2"/></svg>
-                <span class="legend-text">Medium</span>
-            </div>
-            <div class="legend-row">
-                <svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="10" fill="rgba(192,40,45,0.28)" stroke="#c0282d" stroke-width="1.2"/></svg>
-                <span class="legend-text">Large — high value</span>
+            <!-- Color scale legend -->
+            <p class="sidebar-section-label">Intensity scale</p>
+            <div class="color-legend">
+                <div class="color-ramp" id="colorRamp"></div>
+                <div class="color-ramp-labels">
+                    <span>0</span>
+                    <span id="rampMax">1.0</span>
+                </div>
             </div>
 
             <div class="sidebar-divider"></div>
@@ -57,17 +72,21 @@
                 <div class="selected-flag" id="selectedFlag"></div>
                 <p class="selected-name" id="selectedName"></p>
                 <div class="selected-row">
-                    <span class="selected-label">Value</span>
+                    <span class="selected-label">Mean Intensity</span>
                     <span class="selected-value" id="selectedValue"></span>
                 </div>
                 <div class="selected-row">
-                    <span class="selected-label">Coordinates</span>
-                    <span class="selected-value" id="selectedCoords"></span>
+                    <span class="selected-label">Year</span>
+                    <span class="selected-value" id="selectedYear"></span>
+                </div>
+                <div class="selected-row">
+                    <span class="selected-label">Country Code</span>
+                    <span class="selected-value" id="selectedCode"></span>
                 </div>
             </div>
 
-            <div class="sidebar-note">
-                Scroll or pinch to zoom. Click any bubble to see details.
+            <div class="sidebar-note" id="hoverNote">
+                Hover a country to see its intensity. Click to pin details and see historical trend below.
             </div>
 
             <button class="btn-reset" id="resetBtn">↺ Reset view</button>
@@ -78,10 +97,31 @@
             <svg id="map-svg"></svg>
             <div class="tooltip" id="tooltip">
                 <div class="tooltip-country" id="tooltip-country"></div>
-                <div class="tooltip-value"   id="tooltip-value"></div>
+                <div class="tooltip-value" id="tooltip-value"></div>
+                <div class="tooltip-extra" id="tooltip-extra"></div>
             </div>
         </div>
 
+    </div>
+
+    <!-- Year slider bar -->
+    <div class="slider-bar">
+        <span class="slider-label">Year:</span>
+        <span class="slider-year-display" id="yearDisplay">1850</span>
+        <div class="slider-track-wrap">
+            <input type="range" id="yearSlider" min="1850" max="2014" value="1850" step="1">
+        </div>
+        <span class="slider-end">2014</span>
+        <button class="play-btn" id="playBtn" title="Animate through years">▶ Play</button>
+    </div>
+
+    <!-- Historical chart panel -->
+    <div class="chart-panel" id="chartPanel">
+        <div class="chart-panel-header">
+            <span class="chart-panel-title" id="chartTitle">Click a country to see its historical trend</span>
+            <button class="chart-close" id="chartClose">✕</button>
+        </div>
+        <svg id="chart-svg"></svg>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
