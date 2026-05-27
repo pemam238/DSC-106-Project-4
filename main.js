@@ -1,30 +1,138 @@
 /* ─────────────────────────────────────────────────────
-   main.js  —  WaPo-style interactive world map
+   main.js  —  Climate Extreme Weather interactive map
    D3 v7 + TopoJSON
 
-   REPLACE sampleData with your real dataset.
-   Each entry: { name, lat, lng, value, flag }
+   Data: CSV files per event type + experiment
+   Country choropleth shaded by intensity_mean
+   Year slider 1850–2014, event tabs, historical trend chart
    ───────────────────────────────────────────────────── */
 
-   const sampleData = [
-    { name: "United States", lat: 38,   lng: -97,  value: 980, flag: "🇺🇸" },
-    { name: "Brazil",        lat: -14,  lng: -51,  value: 430, flag: "🇧🇷" },
-    { name: "Germany",       lat: 51,   lng: 10,   value: 310, flag: "🇩🇪" },
-    { name: "Nigeria",       lat: 9,    lng: 8,    value: 190, flag: "🇳🇬" },
-    { name: "India",         lat: 20,   lng: 78,   value: 720, flag: "🇮🇳" },
-    { name: "China",         lat: 35,   lng: 105,  value: 850, flag: "🇨🇳" },
-    { name: "Australia",     lat: -25,  lng: 133,  value: 220, flag: "🇦🇺" },
-    { name: "Russia",        lat: 61,   lng: 105,  value: 510, flag: "🇷🇺" },
-    { name: "Argentina",     lat: -34,  lng: -64,  value: 160, flag: "🇦🇷" },
-    { name: "Japan",         lat: 36,   lng: 138,  value: 390, flag: "🇯🇵" },
-    { name: "South Africa",  lat: -29,  lng: 25,   value: 140, flag: "🇿🇦" },
-    { name: "Canada",        lat: 60,   lng: -96,  value: 280, flag: "🇨🇦" },
-];
+// ── State ────────────────────────────────────────────
+let currentEvent = "heat";
+let currentExp   = "historical";
+let currentYear  = 1850;
+let selectedCode = null;          // ISO-2 country code currently pinned
+let allData      = {};            // keyed as "event_experiment" → Map<code, Map<year, row>>
+let worldData    = null;
+let countryNames = {};            // ISO numeric → name
+let isoAlpha2ToNum = {};          // alpha2 → numeric (from TopoJSON properties)
+let playInterval = null;
 
-// Metadata in header
-document.getElementById("point-count").textContent = sampleData.length;
+// ── Country name lookup (ISO 3166-1 alpha-2) ─────────
+// Partial list covering most CSV country codes
+const ISO2_NAMES = {
+  AF:"Afghanistan",AO:"Angola",AL:"Albania",AE:"United Arab Emirates",AR:"Argentina",
+  AM:"Armenia",AU:"Australia",AT:"Austria",AZ:"Azerbaijan",BI:"Burundi",
+  BE:"Belgium",BJ:"Benin",BF:"Burkina Faso",BD:"Bangladesh",BG:"Bulgaria",
+  BH:"Bahrain",BS:"Bahamas",BA:"Bosnia and Herzegovina",BY:"Belarus",BZ:"Belize",
+  BO:"Bolivia",BR:"Brazil",BN:"Brunei",BT:"Bhutan",BW:"Botswana",
+  CF:"Central African Rep.",CG:"Congo",CH:"Switzerland",CI:"Côte d'Ivoire",
+  CL:"Chile",CM:"Cameroon",CN:"China",CD:"DR Congo",CO:"Colombia",
+  CR:"Costa Rica",CU:"Cuba",CY:"Cyprus",CZ:"Czechia",DE:"Germany",
+  DJ:"Djibouti",DK:"Denmark",DO:"Dominican Republic",DZ:"Algeria",
+  EC:"Ecuador",EG:"Egypt",ER:"Eritrea",ES:"Spain",ET:"Ethiopia",
+  FI:"Finland",FJ:"Fiji",FR:"France",GA:"Gabon",GB:"United Kingdom",
+  GE:"Georgia",GH:"Ghana",GN:"Guinea",GQ:"Equatorial Guinea",GR:"Greece",
+  GT:"Guatemala",GW:"Guinea-Bissau",GY:"Guyana",HN:"Honduras",HR:"Croatia",
+  HT:"Haiti",HU:"Hungary",ID:"Indonesia",IE:"Ireland",IN:"India",IQ:"Iraq",
+  IR:"Iran",IS:"Iceland",IL:"Israel",IT:"Italy",JM:"Jamaica",JO:"Jordan",
+  JP:"Japan",KE:"Kenya",KG:"Kyrgyzstan",KH:"Cambodia",KP:"North Korea",
+  KR:"South Korea",KW:"Kuwait",KZ:"Kazakhstan",LA:"Laos",LB:"Lebanon",
+  LK:"Sri Lanka",LR:"Liberia",LS:"Lesotho",LT:"Lithuania",LU:"Luxembourg",
+  LV:"Latvia",LY:"Libya",MA:"Morocco",MD:"Moldova",MK:"North Macedonia",
+  ML:"Mali",MM:"Myanmar",MN:"Mongolia",MR:"Mauritania",MW:"Malawi",
+  MX:"Mexico",MY:"Malaysia",MZ:"Mozambique",NA:"Namibia",NE:"Niger",
+  NG:"Nigeria",NI:"Nicaragua",NL:"Netherlands",NO:"Norway",NP:"Nepal",
+  NZ:"New Zealand",OM:"Oman",PA:"Panama",PE:"Peru",PG:"Papua New Guinea",
+  PH:"Philippines",PK:"Pakistan",PL:"Poland",PR:"Puerto Rico",PT:"Portugal",
+  PY:"Paraguay",QA:"Qatar",RO:"Romania",RS:"Serbia",RU:"Russia",RW:"Rwanda",
+  SA:"Saudi Arabia",SD:"Sudan",SS:"South Sudan",SN:"Senegal",SL:"Sierra Leone",
+  SO:"Somalia",SR:"Suriname",SK:"Slovakia",SI:"Slovenia",SE:"Sweden",
+  SY:"Syria",SZ:"Eswatini",TD:"Chad",TG:"Togo",TH:"Thailand",
+  TJ:"Tajikistan",TL:"Timor-Leste",TM:"Turkmenistan",TN:"Tunisia",
+  TR:"Turkey",TT:"Trinidad and Tobago",TZ:"Tanzania",UA:"Ukraine",
+  UG:"Uganda",US:"United States",UY:"Uruguay",UZ:"Uzbekistan",
+  VE:"Venezuela",VN:"Vietnam",YE:"Yemen",ZA:"South Africa",ZM:"Zambia",ZW:"Zimbabwe"
+};
 
-// ── Dimensions ──────────────────────────────────────
+// ── Flags (emoji) ────────────────────────────────────
+function getFlag(code) {
+    if (!code || code.length !== 2) return "";
+    const offset = 127397;
+    return String.fromCodePoint(...[...code.toUpperCase()].map(c => c.charCodeAt(0) + offset));
+}
+
+// ── Color scale ──────────────────────────────────────
+// Sequential: light paper → red
+const colorScale = d3.scaleSequential()
+    .domain([0, 1])
+    .interpolator(d3.interpolateRgb("#f0ebe3", "#c0282d"));
+
+function noDataColor() { return "#d9d4c7"; }
+
+// ── Data loading ─────────────────────────────────────
+const DATA_BASE = "./data/";
+// Fallback: if no local data folder, we simulate with empty maps
+// so the map still renders.
+
+function dataKey(event, exp) { return `${event}_${exp}`; }
+
+async function loadCSV(event, exp) {
+    const key = dataKey(event, exp);
+    if (allData[key]) return;   // already loaded
+    const filename = `${event}_${exp}_country_year.csv`;
+    try {
+        const rows = await d3.csv(DATA_BASE + filename, d => ({
+            code:  d.country_code,
+            year:  +d.year,
+            mean:  +d.intensity_mean,
+            max:   +d.intensity_max,
+            min:   +d.intensity_min,
+            n:     +d.n_grid_points,
+        }));
+        // Build nested map: code → year → row
+        const nested = new Map();
+        for (const r of rows) {
+            if (!nested.has(r.code)) nested.set(r.code, new Map());
+            nested.get(r.code).set(r.year, r);
+        }
+        allData[key] = nested;
+    } catch(e) {
+        console.warn(`Could not load ${filename}:`, e.message);
+        allData[key] = new Map(); // empty
+    }
+}
+
+// ── Lookup helpers ───────────────────────────────────
+function getRow(code, year) {
+    const nested = allData[dataKey(currentEvent, currentExp)];
+    if (!nested) return null;
+    const byYear = nested.get(code);
+    if (!byYear) return null;
+    return byYear.get(year) || null;
+}
+
+function getCountrySeries(code) {
+    const nested = allData[dataKey(currentEvent, currentExp)];
+    if (!nested) return [];
+    const byYear = nested.get(code);
+    if (!byYear) return [];
+    return Array.from(byYear.values()).sort((a, b) => a.year - b.year);
+}
+
+// ── Compute domain for current event/exp/year ────────
+function computeDomain() {
+    const nested = allData[dataKey(currentEvent, currentExp)];
+    if (!nested) return [0, 1];
+    let max = 0;
+    for (const byYear of nested.values()) {
+        const row = byYear.get(currentYear);
+        if (row && row.mean > max) max = row.mean;
+    }
+    return [0, max || 1];
+}
+
+// ── Map dims & projection ────────────────────────────
 const container = document.getElementById("map-container");
 const svg       = d3.select("#map-svg");
 const tooltip   = document.getElementById("tooltip");
@@ -32,9 +140,6 @@ const tooltip   = document.getElementById("tooltip");
 function getDims() {
     return { w: container.clientWidth, h: container.clientHeight };
 }
-
-// ── Projection ──────────────────────────────────────
-// Natural Earth — swap to d3.geoMercator() or d3.geoOrthographic() as needed
 let { w, h } = getDims();
 
 const projection = d3.geoNaturalEarth1()
@@ -43,21 +148,70 @@ const projection = d3.geoNaturalEarth1()
 
 const path = d3.geoPath().projection(projection);
 
-// ── Zoom & Pan ──────────────────────────────────────
 const zoom = d3.zoom()
     .scaleExtent([1, 8])
     .on("zoom", ({ transform }) => mapGroup.attr("transform", transform));
-
 svg.call(zoom);
 
 const mapGroup = svg.append("g");
 
-// ── Bubble scale ────────────────────────────────────
-const maxVal = d3.max(sampleData, d => d.value);
-const bubbleR = d3.scaleSqrt().domain([0, maxVal]).range([4, 28]);
+// ── Build alpha-2 → TopoJSON id map using D3 world data ──
+// We'll store a Map from alpha2 code to path element after rendering
+let countryPathMap = new Map();   // alpha2 → SVGPathElement
 
-// ── Load world TopoJSON ─────────────────────────────
-d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json").then(world => {
+// ── Choropleth update ─────────────────────────────────
+function updateChoropleth() {
+    const [domMin, domMax] = computeDomain();
+    colorScale.domain([domMin, domMax]);
+
+    // Update ramp label
+    document.getElementById("rampMax").textContent = domMax.toFixed ? domMax.toFixed(2) : domMax;
+
+    mapGroup.selectAll(".country").each(function(d) {
+        const alpha2 = d.properties?.alpha2;
+        const row = alpha2 ? getRow(alpha2, currentYear) : null;
+        d3.select(this).attr("fill", row ? colorScale(row.mean) : noDataColor());
+    });
+}
+
+// ── TopoJSON world load ──────────────────────────────
+// We need alpha2 codes attached to TopoJSON features.
+// world-atlas doesn't include them natively, so we load a
+// small ISO lookup JSON that maps numeric id → alpha2.
+// Fallback: try to match by feature id against a hardcoded table.
+
+// Numeric ISO → alpha2 (partial, covers most countries)
+const NUM_TO_ALPHA2 = {
+  4:"AF",8:"AL",12:"DZ",24:"AO",32:"AR",36:"AU",40:"AT",31:"AZ",48:"BH",50:"BD",
+  56:"BE",64:"BT",68:"BO",76:"BR",100:"BG",854:"BF",108:"BI",116:"KH",120:"CM",
+  124:"CA",140:"CF",144:"LK",152:"CL",170:"CO",178:"CG",180:"CD",188:"CR",191:"HR",
+  192:"CU",196:"CY",203:"CZ",204:"BJ",208:"DK",214:"DO",218:"EC",818:"EG",222:"SV",
+  226:"GQ",232:"ER",231:"ET",246:"FI",242:"FJ",266:"GA",276:"DE",288:"GH",300:"GR",
+  320:"GT",324:"GN",624:"GW",328:"GY",332:"HT",340:"HN",348:"HU",356:"IN",360:"ID",
+  364:"IR",368:"IQ",372:"IE",376:"IL",380:"IT",388:"JM",400:"JO",392:"JP",404:"KE",
+  408:"KP",410:"KR",414:"KW",398:"KZ",418:"LA",422:"LB",430:"LR",426:"LS",440:"LT",
+  442:"LU",428:"LV",434:"LY",484:"MX",458:"MY",466:"ML",504:"MA",516:"NA",524:"NP",
+  528:"NL",554:"NZ",558:"NI",562:"NE",566:"NG",578:"NO",512:"OM",586:"PK",591:"PA",
+  598:"PG",600:"PY",604:"PE",608:"PH",616:"PL",620:"PT",630:"PR",634:"QA",642:"RO",
+  703:"SK",705:"SI",706:"SO",710:"ZA",724:"ES",144:"LK",729:"SD",740:"SR",752:"SE",
+  756:"CH",760:"SY",762:"TJ",764:"TH",768:"TG",780:"TT",788:"TN",792:"TR",800:"UG",
+  804:"UA",784:"AE",826:"GB",840:"US",858:"UY",860:"UZ",862:"VE",704:"VN",887:"YE",
+  894:"ZM",716:"ZW",646:"RW",678:"ST",686:"SN",694:"SL",736:"SD",716:"ZW",156:"CN",
+  643:"RU",72:"BW",84:"BZ",104:"MM",496:"MN",418:"LA",854:"BF",706:"SO",694:"SL",
+  807:"MK",498:"MD",508:"MZ",454:"MW",788:"TN",566:"NG",148:"TD",686:"SN"
+};
+
+async function initMap() {
+    const world = await d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
+    worldData = world;
+
+    // Attach alpha2 to each feature
+    const features = topojson.feature(world, world.objects.countries).features;
+    for (const f of features) {
+        const alpha2 = NUM_TO_ALPHA2[+f.id];
+        if (!f.properties) f.properties = {};
+        f.properties.alpha2 = alpha2 || null;
+    }
 
     mapGroup.append("path")
         .datum({ type: "Sphere" })
@@ -71,95 +225,263 @@ d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json").then(w
 
     mapGroup.append("g")
         .selectAll("path")
-        .data(topojson.feature(world, world.objects.countries).features)
+        .data(features)
         .join("path")
             .attr("class", "country")
             .attr("d", path)
-            .on("click", function() {
-                d3.selectAll(".country").classed("active", false);
-                d3.select(this).classed("active", true);
-            });
-
-    // ── Bubbles ─────────────────────────────────────
-    mapGroup.append("g")
-        .selectAll("circle")
-        .data(sampleData)
-        .join("circle")
-            .attr("class", "bubble")
-            .attr("cx", d => projection([d.lng, d.lat])[0])
-            .attr("cy", d => projection([d.lng, d.lat])[1])
-            .attr("r",  d => bubbleR(d.value))
+            .attr("fill", noDataColor())
             .on("mousemove", function(event, d) {
+                const alpha2 = d.properties?.alpha2;
+                const row = alpha2 ? getRow(alpha2, currentYear) : null;
+                const name = alpha2 ? (ISO2_NAMES[alpha2] || alpha2) : "Unknown";
                 const [mx, my] = d3.pointer(event, container);
                 tooltip.classList.add("visible");
                 tooltip.style.left = (mx + 14) + "px";
-                tooltip.style.top  = (my - 42) + "px";
-                document.getElementById("tooltip-country").textContent = (d.flag || "") + "  " + d.name;
-                document.getElementById("tooltip-value").textContent   = "Value: " + d.value.toLocaleString();
+                tooltip.style.top  = Math.max(0, my - 60) + "px";
+                document.getElementById("tooltip-country").textContent =
+                    (alpha2 ? getFlag(alpha2) + "  " : "") + name;
+                document.getElementById("tooltip-value").textContent =
+                    row ? `Mean intensity: ${row.mean.toFixed(4)}` : "No data";
+                document.getElementById("tooltip-extra").textContent =
+                    row ? `Grid points: ${row.n}` : "";
             })
             .on("mouseleave", () => tooltip.classList.remove("visible"))
             .on("click", function(event, d) {
                 event.stopPropagation();
-                openSidebar(d);
+                const alpha2 = d.properties?.alpha2;
+                if (!alpha2) return;
+                d3.selectAll(".country").classed("active", false);
+                d3.select(this).classed("active", true);
+                pinCountry(alpha2);
             });
 
-}).catch(err => console.error("Map load failed:", err));
+    svg.on("click", () => {
+        d3.selectAll(".country").classed("active", false);
+    });
 
-// ── Sidebar detail ──────────────────────────────────
-function openSidebar(d) {
-    const card = document.getElementById("selectedCard");
-    document.getElementById("selectedFlag").textContent   = d.flag || "";
-    document.getElementById("selectedName").textContent   = d.name;
-    document.getElementById("selectedValue").textContent  = d.value.toLocaleString();
-    document.getElementById("selectedCoords").textContent =
-        `${Math.abs(d.lat)}°${d.lat >= 0 ? "N" : "S"}, ${Math.abs(d.lng)}°${d.lng >= 0 ? "E" : "W"}`;
-    card.style.display = "block";
+    // Initial data load + render
+    await loadCSV(currentEvent, currentExp);
+    updateChoropleth();
 }
 
-// ── Reset ────────────────────────────────────────────
+// ── Pin country (sidebar + chart) ────────────────────
+function pinCountry(alpha2) {
+    selectedCode = alpha2;
+    const name = ISO2_NAMES[alpha2] || alpha2;
+    const row  = getRow(alpha2, currentYear);
+
+    document.getElementById("selectedFlag").textContent  = getFlag(alpha2);
+    document.getElementById("selectedName").textContent  = name;
+    document.getElementById("selectedValue").textContent = row ? row.mean.toFixed(4) : "N/A";
+    document.getElementById("selectedYear").textContent  = currentYear;
+    document.getElementById("selectedCode").textContent  = alpha2;
+    document.getElementById("selectedCard").style.display = "block";
+
+    updateChart(alpha2);
+}
+
+// ── Historical chart ─────────────────────────────────
+function updateChart(alpha2) {
+    const name   = ISO2_NAMES[alpha2] || alpha2;
+    const series = getCountrySeries(alpha2);
+    const panel  = document.getElementById("chartPanel");
+    const chartSvg = d3.select("#chart-svg");
+    chartSvg.selectAll("*").remove();
+
+    document.getElementById("chartTitle").textContent =
+        `${getFlag(alpha2)} ${name} — ${currentEvent} intensity (${currentExp})`;
+    panel.classList.add("visible");
+
+    if (!series.length) {
+        chartSvg.append("text")
+            .attr("x", 20).attr("y", 60)
+            .attr("font-family", "var(--font-ui)")
+            .attr("font-size", 12)
+            .attr("fill", "var(--ink-muted)")
+            .text("No data available for this country / event combination.");
+        return;
+    }
+
+    const svgEl  = document.getElementById("chart-svg");
+    const W      = svgEl.clientWidth  || 800;
+    const H      = svgEl.clientHeight || 130;
+    const margin = { top: 10, right: 20, bottom: 28, left: 48 };
+    const iW     = W - margin.left - margin.right;
+    const iH     = H - margin.top  - margin.bottom;
+
+    const g = chartSvg.append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    const xScale = d3.scaleLinear()
+        .domain([1850, 2014])
+        .range([0, iW]);
+
+    const yMax = d3.max(series, d => d.mean) * 1.05 || 1;
+    const yScale = d3.scaleLinear()
+        .domain([0, yMax])
+        .range([iH, 0]);
+
+    // Area
+    const area = d3.area()
+        .x(d => xScale(d.year))
+        .y0(iH)
+        .y1(d => yScale(d.mean))
+        .curve(d3.curveMonotoneX);
+
+    // Line
+    const line = d3.line()
+        .x(d => xScale(d.year))
+        .y(d => yScale(d.mean))
+        .curve(d3.curveMonotoneX);
+
+    g.append("path").datum(series).attr("class", "chart-area").attr("d", area);
+    g.append("path").datum(series).attr("class", "chart-line").attr("d", line);
+
+    // Current year marker
+    g.append("line")
+        .attr("class", "chart-year-line")
+        .attr("x1", xScale(currentYear))
+        .attr("x2", xScale(currentYear))
+        .attr("y1", 0)
+        .attr("y2", iH);
+
+    g.append("text")
+        .attr("x", Math.min(xScale(currentYear) + 3, iW - 30))
+        .attr("y", 10)
+        .attr("font-family", "var(--font-ui)")
+        .attr("font-size", 9)
+        .attr("fill", "var(--ink-muted)")
+        .text(currentYear);
+
+    // Axes
+    g.append("g")
+        .attr("class", "chart-axis")
+        .attr("transform", `translate(0,${iH})`)
+        .call(d3.axisBottom(xScale).ticks(8).tickFormat(d3.format("d")));
+
+    g.append("g")
+        .attr("class", "chart-axis")
+        .call(d3.axisLeft(yScale).ticks(4).tickFormat(d3.format(".2f")));
+
+    // Y-label
+    g.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("x", -iH / 2).attr("y", -40)
+        .attr("text-anchor", "middle")
+        .attr("font-family", "var(--font-ui)")
+        .attr("font-size", 9)
+        .attr("fill", "var(--ink-muted)")
+        .text("Intensity (mean)");
+}
+
+// ── Year slider ───────────────────────────────────────
+const yearSlider  = document.getElementById("yearSlider");
+const yearDisplay = document.getElementById("yearDisplay");
+
+yearSlider.addEventListener("input", async () => {
+    currentYear = +yearSlider.value;
+    yearDisplay.textContent = currentYear;
+    await loadCSV(currentEvent, currentExp);
+    updateChoropleth();
+    if (selectedCode) {
+        const row = getRow(selectedCode, currentYear);
+        document.getElementById("selectedValue").textContent = row ? row.mean.toFixed(4) : "N/A";
+        document.getElementById("selectedYear").textContent  = currentYear;
+        // Refresh chart year marker
+        if (document.getElementById("chartPanel").classList.contains("visible")) {
+            updateChart(selectedCode);
+        }
+    }
+});
+
+// ── Play animation ────────────────────────────────────
+const playBtn = document.getElementById("playBtn");
+playBtn.addEventListener("click", () => {
+    if (playInterval) {
+        clearInterval(playInterval);
+        playInterval = null;
+        playBtn.textContent = "▶ Play";
+        playBtn.classList.remove("playing");
+        return;
+    }
+    playBtn.textContent = "⏹ Stop";
+    playBtn.classList.add("playing");
+    // Jump to start if at end
+    if (currentYear >= 2014) { currentYear = 1850; yearSlider.value = 1850; }
+
+    playInterval = setInterval(async () => {
+        currentYear++;
+        yearSlider.value = currentYear;
+        yearDisplay.textContent = currentYear;
+        await loadCSV(currentEvent, currentExp);
+        updateChoropleth();
+        if (selectedCode) {
+            const row = getRow(selectedCode, currentYear);
+            document.getElementById("selectedValue").textContent = row ? row.mean.toFixed(4) : "N/A";
+            document.getElementById("selectedYear").textContent  = currentYear;
+        }
+        if (currentYear >= 2014) {
+            clearInterval(playInterval);
+            playInterval = null;
+            playBtn.textContent = "▶ Play";
+            playBtn.classList.remove("playing");
+        }
+    }, 120);
+});
+
+// ── Event tabs ────────────────────────────────────────
+document.querySelectorAll(".event-tab").forEach(btn => {
+    btn.addEventListener("click", async () => {
+        document.querySelectorAll(".event-tab").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentEvent = btn.dataset.event;
+        await loadCSV(currentEvent, currentExp);
+        updateChoropleth();
+        if (selectedCode) updateChart(selectedCode);
+    });
+});
+
+// ── Experiment toggle ─────────────────────────────────
+document.querySelectorAll(".exp-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+        document.querySelectorAll(".exp-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentExp = btn.dataset.exp;
+        await loadCSV(currentEvent, currentExp);
+        updateChoropleth();
+        if (selectedCode) updateChart(selectedCode);
+    });
+});
+
+// ── Reset ─────────────────────────────────────────────
 document.getElementById("resetBtn").addEventListener("click", () => {
     svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
     d3.selectAll(".country").classed("active", false);
     document.getElementById("selectedCard").style.display = "none";
+    selectedCode = null;
 });
 
-svg.on("click", () => d3.selectAll(".country").classed("active", false));
+// ── Chart close ────────────────────────────────────────
+document.getElementById("chartClose").addEventListener("click", () => {
+    document.getElementById("chartPanel").classList.remove("visible");
+    d3.selectAll(".country").classed("active", false);
+    selectedCode = null;
+    document.getElementById("selectedCard").style.display = "none";
+});
 
-// ── Responsive resize ────────────────────────────────
+// ── Responsive resize ─────────────────────────────────
 window.addEventListener("resize", () => {
     const dims = getDims();
     projection.scale(dims.w / 6.3).translate([dims.w / 2, dims.h / 2]);
-    mapGroup.selectAll("path").attr("d", path);
-    mapGroup.selectAll(".bubble")
-        .attr("cx", d => projection([d.lng, d.lat])[0])
-        .attr("cy", d => projection([d.lng, d.lat])[1]);
+    mapGroup.selectAll("path.country, path.sphere, path.graticule").attr("d", path);
+    if (selectedCode && document.getElementById("chartPanel").classList.contains("visible")) {
+        updateChart(selectedCode);
+    }
 });
 
-/* ─────────────────────────────────────────────────────
-   TIPS:
+// ── Count display ─────────────────────────────────────
+document.getElementById("point-count").textContent =
+    Object.keys(ISO2_NAMES).length;
 
-   Change headline text → edit .masthead-title in index.html
-   Change article body  → edit .sidebar-lede in index.html
-   Change accent color  → edit --red in global.css
-
-   Animate bubbles on load:
-       .attr("r", 0)
-       .transition().duration(600).delay((_, i) => i * 50)
-       .attr("r", d => bubbleR(d.value))
-
-   Color-code by category:
-       const color = d3.scaleOrdinal()
-           .domain(["Asia","Europe","Americas"])
-           .range(["#c0282d","#1a6bab","#2a7a45"]);
-       .style("stroke", d => color(d.region))
-       .style("fill",   d => color(d.region) + "33")
-
-   Zoom to a point:
-       svg.transition().duration(600).call(
-           zoom.transform,
-           d3.zoomIdentity
-               .translate(w/2, h/2)
-               .scale(4)
-               .translate(-projection([d.lng, d.lat])[0], -projection([d.lng, d.lat])[1])
-       );
-   ───────────────────────────────────────────────────── */
+// ── Boot ──────────────────────────────────────────────
+initMap();
