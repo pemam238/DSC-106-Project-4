@@ -1,25 +1,18 @@
 /* ─────────────────────────────────────────────────────
-   main.js  —  Climate Extreme Weather interactive map
+   main.js  —  Climate Extreme Weather interactive GLOBE
    D3 v7 + TopoJSON
-
-   Data: CSV files per event type + experiment
-   Country choropleth shaded by intensity_mean
-   Year slider 1850–2014, event tabs, historical trend chart
    ───────────────────────────────────────────────────── */
 
 // ── State ────────────────────────────────────────────
 let currentEvent = "heat";
 let currentExp   = "historical";
 let currentYear  = 1850;
-let selectedCode = null;          // ISO-2 country code currently pinned
-let allData      = {};            // keyed as "event_experiment" → Map<code, Map<year, row>>
+let selectedCode = null;
+let allData      = {};
 let worldData    = null;
-let countryNames = {};            // ISO numeric → name
-let isoAlpha2ToNum = {};          // alpha2 → numeric (from TopoJSON properties)
 let playInterval = null;
 
 // ── Country name lookup (ISO 3166-1 alpha-2) ─────────
-// Partial list covering most CSV country codes
 const ISO2_NAMES = {
   AF:"Afghanistan",AO:"Angola",AL:"Albania",AE:"United Arab Emirates",AR:"Argentina",
   AM:"Armenia",AU:"Australia",AT:"Austria",AZ:"Azerbaijan",BI:"Burundi",
@@ -55,7 +48,6 @@ const ISO2_NAMES = {
   VE:"Venezuela",VN:"Vietnam",YE:"Yemen",ZA:"South Africa",ZM:"Zambia",ZW:"Zimbabwe"
 };
 
-// ── Flags (emoji) ────────────────────────────────────
 function getFlag(code) {
     if (!code || code.length !== 2) return "";
     const offset = 127397;
@@ -63,7 +55,6 @@ function getFlag(code) {
 }
 
 // ── Color scale ──────────────────────────────────────
-// Sequential: light paper → red
 const colorScale = d3.scaleSequential()
     .domain([0, 1])
     .interpolator(d3.interpolateRgb("#f0ebe3", "#c0282d"));
@@ -72,25 +63,22 @@ function noDataColor() { return "#d9d4c7"; }
 
 // ── Data loading ─────────────────────────────────────
 const DATA_BASE = "./data/";
-// Fallback: if no local data folder, we simulate with empty maps
-// so the map still renders.
 
 function dataKey(event, exp) { return `${event}_${exp}`; }
 
 async function loadCSV(event, exp) {
     const key = dataKey(event, exp);
-    if (allData[key]) return;   // already loaded
+    if (allData[key]) return;
     const filename = `${event}_${exp}_country_year.csv`;
     try {
         const rows = await d3.csv(DATA_BASE + filename, d => ({
-            code:  d.country_code,
-            year:  +d.year,
-            mean:  +d.intensity_mean,
-            max:   +d.intensity_max,
-            min:   +d.intensity_min,
-            n:     +d.n_grid_points,
+            code: d.country_code,
+            year: +d.year,
+            mean: +d.intensity_mean,
+            max:  +d.intensity_max,
+            min:  +d.intensity_min,
+            n:    +d.n_grid_points,
         }));
-        // Build nested map: code → year → row
         const nested = new Map();
         for (const r of rows) {
             if (!nested.has(r.code)) nested.set(r.code, new Map());
@@ -99,11 +87,10 @@ async function loadCSV(event, exp) {
         allData[key] = nested;
     } catch(e) {
         console.warn(`Could not load ${filename}:`, e.message);
-        allData[key] = new Map(); // empty
+        allData[key] = new Map();
     }
 }
 
-// ── Lookup helpers ───────────────────────────────────
 function getRow(code, year) {
     const nested = allData[dataKey(currentEvent, currentExp)];
     if (!nested) return null;
@@ -120,7 +107,6 @@ function getCountrySeries(code) {
     return Array.from(byYear.values()).sort((a, b) => a.year - b.year);
 }
 
-// ── Compute domain for current event/exp/year ────────
 function computeDomain() {
     const nested = allData[dataKey(currentEvent, currentExp)];
     if (!nested) return [0, 1];
@@ -132,7 +118,7 @@ function computeDomain() {
     return [0, max || 1];
 }
 
-// ── Map dims & projection ────────────────────────────
+// ── DOM refs ──────────────────────────────────────────
 const container = document.getElementById("map-container");
 const svg       = d3.select("#map-svg");
 const tooltip   = document.getElementById("tooltip");
@@ -142,45 +128,72 @@ function getDims() {
 }
 let { w, h } = getDims();
 
-const projection = d3.geoNaturalEarth1()
-    .scale(w / 6.3)
-    .translate([w / 2, h / 2]);
+// ── Globe projection ──────────────────────────────────
+let baseScale = Math.min(w, h) / 2 - 4;
+
+const projection = d3.geoOrthographic()
+    .scale(baseScale)
+    .translate([w / 2, h / 2])
+    .clipAngle(90)
+    .rotate([0, -20]);
 
 const path = d3.geoPath().projection(projection);
 
-const zoom = d3.zoom()
-    .scaleExtent([1, 8])
-    .on("zoom", ({ transform }) => mapGroup.attr("transform", transform));
-svg.call(zoom);
-
-const mapGroup = svg.append("g");
-
-// ── Build alpha-2 → TopoJSON id map using D3 world data ──
-// We'll store a Map from alpha2 code to path element after rendering
-let countryPathMap = new Map();   // alpha2 → SVGPathElement
-
-// ── Choropleth update ─────────────────────────────────
-function updateChoropleth() {
-    const [domMin, domMax] = computeDomain();
-    colorScale.domain([domMin, domMax]);
-
-    // Update ramp label
-    document.getElementById("rampMax").textContent = domMax.toFixed ? domMax.toFixed(2) : domMax;
-
-    mapGroup.selectAll(".country").each(function(d) {
-        const alpha2 = d.properties?.alpha2;
-        const row = alpha2 ? getRow(alpha2, currentYear) : null;
-        d3.select(this).attr("fill", row ? colorScale(row.mean) : noDataColor());
-    });
+function redrawGlobe() {
+    svg.select("#globe-clip path").attr("d", path);
+    mapGroup.selectAll("path").attr("d", path);
 }
 
-// ── TopoJSON world load ──────────────────────────────
-// We need alpha2 codes attached to TopoJSON features.
-// world-atlas doesn't include them natively, so we load a
-// small ISO lookup JSON that maps numeric id → alpha2.
-// Fallback: try to match by feature id against a hardcoded table.
+// ── d3.drag() for globe rotation ─────────────────────
+let dragStartRotation = null;
+let dragStartPos      = null;
+let isDragging        = false;
 
-// Numeric ISO → alpha2 (partial, covers most countries)
+const drag = d3.drag()
+    .on("start", function(event) {
+        isDragging = true;
+        dragStartRotation = projection.rotate().slice();
+        dragStartPos = [event.x, event.y];
+        svg.style("cursor", "grabbing");
+        tooltip.classList.remove("visible");
+    })
+    .on("drag", function(event) {
+        if (!dragStartRotation) return;
+        const dx = event.x - dragStartPos[0];
+        const dy = event.y - dragStartPos[1];
+        const sensitivity = 0.4;
+        projection.rotate([
+            dragStartRotation[0] + dx * sensitivity,
+            dragStartRotation[1] - dy * sensitivity
+        ]);
+        redrawGlobe();
+    })
+    .on("end", function() {
+        isDragging = false;
+        dragStartRotation = null;
+        dragStartPos = null;
+        svg.style("cursor", "grab");
+    });
+
+svg.call(drag);
+svg.style("cursor", "grab");
+
+// ── Scroll-to-zoom ─────────────────────────────────────
+svg.on("wheel", function(event) {
+    event.preventDefault();
+    const currentScale = projection.scale();
+    const minScale = baseScale;
+    const maxScale = baseScale * 6;
+    const delta    = event.deltaY > 0 ? 0.9 : 1.1;
+    const newScale = Math.max(minScale, Math.min(maxScale, currentScale * delta));
+    projection.scale(newScale);
+    redrawGlobe();
+}, { passive: false });
+
+// ── Map group ─────────────────────────────────────────
+const mapGroup = svg.append("g");
+
+// ── ISO numeric → alpha-2 ─────────────────────────────
 const NUM_TO_ALPHA2 = {
   4:"AF",8:"AL",12:"DZ",24:"AO",32:"AR",36:"AU",40:"AT",31:"AZ",48:"BH",50:"BD",
   56:"BE",64:"BT",68:"BO",76:"BR",100:"BG",854:"BF",108:"BI",116:"KH",120:"CM",
@@ -193,25 +206,51 @@ const NUM_TO_ALPHA2 = {
   442:"LU",428:"LV",434:"LY",484:"MX",458:"MY",466:"ML",504:"MA",516:"NA",524:"NP",
   528:"NL",554:"NZ",558:"NI",562:"NE",566:"NG",578:"NO",512:"OM",586:"PK",591:"PA",
   598:"PG",600:"PY",604:"PE",608:"PH",616:"PL",620:"PT",630:"PR",634:"QA",642:"RO",
-  703:"SK",705:"SI",706:"SO",710:"ZA",724:"ES",144:"LK",729:"SD",740:"SR",752:"SE",
+  703:"SK",705:"SI",706:"SO",710:"ZA",724:"ES",729:"SD",740:"SR",752:"SE",
   756:"CH",760:"SY",762:"TJ",764:"TH",768:"TG",780:"TT",788:"TN",792:"TR",800:"UG",
   804:"UA",784:"AE",826:"GB",840:"US",858:"UY",860:"UZ",862:"VE",704:"VN",887:"YE",
-  894:"ZM",716:"ZW",646:"RW",678:"ST",686:"SN",694:"SL",736:"SD",716:"ZW",156:"CN",
-  643:"RU",72:"BW",84:"BZ",104:"MM",496:"MN",418:"LA",854:"BF",706:"SO",694:"SL",
-  807:"MK",498:"MD",508:"MZ",454:"MW",788:"TN",566:"NG",148:"TD",686:"SN"
+  894:"ZM",716:"ZW",646:"RW",686:"SN",694:"SL",807:"MK",498:"MD",508:"MZ",454:"MW",
+  148:"TD",156:"CN",643:"RU",72:"BW",84:"BZ",104:"MM",496:"MN"
 };
 
+// ── Choropleth update ─────────────────────────────────
+function updateChoropleth() {
+    const [domMin, domMax] = computeDomain();
+    colorScale.domain([domMin, domMax]);
+    document.getElementById("rampMax").textContent = domMax.toFixed ? domMax.toFixed(2) : domMax;
+    mapGroup.selectAll(".country").each(function(d) {
+        const alpha2 = d.properties?.alpha2;
+        const row = alpha2 ? getRow(alpha2, currentYear) : null;
+        d3.select(this).attr("fill", row ? colorScale(row.mean) : noDataColor());
+    });
+}
+
+// ── TopoJSON world load ──────────────────────────────
 async function initMap() {
+    // FIX: correctly read both width and height from container
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    svg.attr("width", cw).attr("height", ch).attr("viewBox", `0 0 ${cw} ${ch}`);
+
+    baseScale = Math.min(cw, ch) / 2 - 4;
+    projection.scale(baseScale).translate([cw / 2, ch / 2]);
+
     const world = await d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
     worldData = world;
 
-    // Attach alpha2 to each feature
     const features = topojson.feature(world, world.objects.countries).features;
     for (const f of features) {
         const alpha2 = NUM_TO_ALPHA2[+f.id];
         if (!f.properties) f.properties = {};
         f.properties.alpha2 = alpha2 || null;
     }
+
+    svg.append("defs")
+        .append("clipPath")
+        .attr("id", "globe-clip")
+        .append("path")
+        .datum({ type: "Sphere" })
+        .attr("d", path);
 
     mapGroup.append("path")
         .datum({ type: "Sphere" })
@@ -221,23 +260,33 @@ async function initMap() {
     mapGroup.append("path")
         .datum(d3.geoGraticule()())
         .attr("class", "graticule")
-        .attr("d", path);
+        .attr("d", path)
+        .attr("clip-path", "url(#globe-clip)");
 
-    mapGroup.append("g")
-        .selectAll("path")
+    const countryGroup = mapGroup.append("g")
+        .attr("clip-path", "url(#globe-clip)");
+
+    countryGroup.selectAll("path")
         .data(features)
         .join("path")
             .attr("class", "country")
             .attr("d", path)
             .attr("fill", noDataColor())
             .on("mousemove", function(event, d) {
+                if (isDragging) return;
                 const alpha2 = d.properties?.alpha2;
-                const row = alpha2 ? getRow(alpha2, currentYear) : null;
+                const row  = alpha2 ? getRow(alpha2, currentYear) : null;
                 const name = alpha2 ? (ISO2_NAMES[alpha2] || alpha2) : "Unknown";
-                const [mx, my] = d3.pointer(event, container);
+
+                const tx = event.clientX + 14;
+                const ty = event.clientY - 60;
+                const ttW = 160;
+                const left = tx + ttW > window.innerWidth ? event.clientX - ttW - 8 : tx;
+
                 tooltip.classList.add("visible");
-                tooltip.style.left = (mx + 14) + "px";
-                tooltip.style.top  = Math.max(0, my - 60) + "px";
+                tooltip.style.left = left + "px";
+                tooltip.style.top  = Math.max(8, ty) + "px";
+
                 document.getElementById("tooltip-country").textContent =
                     (alpha2 ? getFlag(alpha2) + "  " : "") + name;
                 document.getElementById("tooltip-value").textContent =
@@ -245,8 +294,11 @@ async function initMap() {
                 document.getElementById("tooltip-extra").textContent =
                     row ? `Grid points: ${row.n}` : "";
             })
-            .on("mouseleave", () => tooltip.classList.remove("visible"))
+            .on("mouseleave", () => {
+                if (!isDragging) tooltip.classList.remove("visible");
+            })
             .on("click", function(event, d) {
+                if (isDragging) return;
                 event.stopPropagation();
                 const alpha2 = d.properties?.alpha2;
                 if (!alpha2) return;
@@ -255,16 +307,15 @@ async function initMap() {
                 pinCountry(alpha2);
             });
 
-    svg.on("click", () => {
-        d3.selectAll(".country").classed("active", false);
+    svg.on("click.deselect", () => {
+        if (!isDragging) d3.selectAll(".country").classed("active", false);
     });
 
-    // Initial data load + render
     await loadCSV(currentEvent, currentExp);
     updateChoropleth();
 }
 
-// ── Pin country (sidebar + chart) ────────────────────
+// ── Pin country ───────────────────────────────────────
 function pinCountry(alpha2) {
     selectedCode = alpha2;
     const name = ISO2_NAMES[alpha2] || alpha2;
@@ -282,9 +333,9 @@ function pinCountry(alpha2) {
 
 // ── Historical chart ─────────────────────────────────
 function updateChart(alpha2) {
-    const name   = ISO2_NAMES[alpha2] || alpha2;
-    const series = getCountrySeries(alpha2);
-    const panel  = document.getElementById("chartPanel");
+    const name     = ISO2_NAMES[alpha2] || alpha2;
+    const series   = getCountrySeries(alpha2);
+    const panel    = document.getElementById("chartPanel");
     const chartSvg = d3.select("#chart-svg");
     chartSvg.selectAll("*").remove();
 
@@ -293,10 +344,8 @@ function updateChart(alpha2) {
     panel.classList.add("visible");
 
     if (!series.length) {
-        chartSvg.append("text")
-            .attr("x", 20).attr("y", 60)
-            .attr("font-family", "var(--font-ui)")
-            .attr("font-size", 12)
+        chartSvg.append("text").attr("x", 20).attr("y", 60)
+            .attr("font-family", "var(--font-ui)").attr("font-size", 12)
             .attr("fill", "var(--ink-muted)")
             .text("No data available for this country / event combination.");
         return;
@@ -309,69 +358,35 @@ function updateChart(alpha2) {
     const iW     = W - margin.left - margin.right;
     const iH     = H - margin.top  - margin.bottom;
 
-    const g = chartSvg.append("g")
-        .attr("transform", `translate(${margin.left},${margin.top})`);
+    const g = chartSvg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-    const xScale = d3.scaleLinear()
-        .domain([1850, 2014])
-        .range([0, iW]);
+    const xScale = d3.scaleLinear().domain([1850, 2014]).range([0, iW]);
+    const yMax   = d3.max(series, d => d.mean) * 1.05 || 1;
+    const yScale = d3.scaleLinear().domain([0, yMax]).range([iH, 0]);
 
-    const yMax = d3.max(series, d => d.mean) * 1.05 || 1;
-    const yScale = d3.scaleLinear()
-        .domain([0, yMax])
-        .range([iH, 0]);
-
-    // Area
-    const area = d3.area()
-        .x(d => xScale(d.year))
-        .y0(iH)
-        .y1(d => yScale(d.mean))
-        .curve(d3.curveMonotoneX);
-
-    // Line
-    const line = d3.line()
-        .x(d => xScale(d.year))
-        .y(d => yScale(d.mean))
-        .curve(d3.curveMonotoneX);
+    const area = d3.area().x(d => xScale(d.year)).y0(iH).y1(d => yScale(d.mean)).curve(d3.curveMonotoneX);
+    const line = d3.line().x(d => xScale(d.year)).y(d => yScale(d.mean)).curve(d3.curveMonotoneX);
 
     g.append("path").datum(series).attr("class", "chart-area").attr("d", area);
     g.append("path").datum(series).attr("class", "chart-line").attr("d", line);
 
-    // Current year marker
-    g.append("line")
-        .attr("class", "chart-year-line")
-        .attr("x1", xScale(currentYear))
-        .attr("x2", xScale(currentYear))
-        .attr("y1", 0)
-        .attr("y2", iH);
+    g.append("line").attr("class", "chart-year-line")
+        .attr("x1", xScale(currentYear)).attr("x2", xScale(currentYear))
+        .attr("y1", 0).attr("y2", iH);
 
     g.append("text")
-        .attr("x", Math.min(xScale(currentYear) + 3, iW - 30))
-        .attr("y", 10)
-        .attr("font-family", "var(--font-ui)")
-        .attr("font-size", 9)
-        .attr("fill", "var(--ink-muted)")
-        .text(currentYear);
+        .attr("x", Math.min(xScale(currentYear) + 3, iW - 30)).attr("y", 10)
+        .attr("font-family", "var(--font-ui)").attr("font-size", 9)
+        .attr("fill", "var(--ink-muted)").text(currentYear);
 
-    // Axes
-    g.append("g")
-        .attr("class", "chart-axis")
-        .attr("transform", `translate(0,${iH})`)
+    g.append("g").attr("class", "chart-axis").attr("transform", `translate(0,${iH})`)
         .call(d3.axisBottom(xScale).ticks(8).tickFormat(d3.format("d")));
-
-    g.append("g")
-        .attr("class", "chart-axis")
+    g.append("g").attr("class", "chart-axis")
         .call(d3.axisLeft(yScale).ticks(4).tickFormat(d3.format(".2f")));
 
-    // Y-label
-    g.append("text")
-        .attr("transform", "rotate(-90)")
-        .attr("x", -iH / 2).attr("y", -40)
-        .attr("text-anchor", "middle")
-        .attr("font-family", "var(--font-ui)")
-        .attr("font-size", 9)
-        .attr("fill", "var(--ink-muted)")
-        .text("Intensity (mean)");
+    g.append("text").attr("transform", "rotate(-90)").attr("x", -iH / 2).attr("y", -40)
+        .attr("text-anchor", "middle").attr("font-family", "var(--font-ui)")
+        .attr("font-size", 9).attr("fill", "var(--ink-muted)").text("Intensity (mean)");
 }
 
 // ── Year slider ───────────────────────────────────────
@@ -387,10 +402,7 @@ yearSlider.addEventListener("input", async () => {
         const row = getRow(selectedCode, currentYear);
         document.getElementById("selectedValue").textContent = row ? row.mean.toFixed(4) : "N/A";
         document.getElementById("selectedYear").textContent  = currentYear;
-        // Refresh chart year marker
-        if (document.getElementById("chartPanel").classList.contains("visible")) {
-            updateChart(selectedCode);
-        }
+        if (document.getElementById("chartPanel").classList.contains("visible")) updateChart(selectedCode);
     }
 });
 
@@ -398,15 +410,11 @@ yearSlider.addEventListener("input", async () => {
 const playBtn = document.getElementById("playBtn");
 playBtn.addEventListener("click", () => {
     if (playInterval) {
-        clearInterval(playInterval);
-        playInterval = null;
-        playBtn.textContent = "▶ Play";
-        playBtn.classList.remove("playing");
+        clearInterval(playInterval); playInterval = null;
+        playBtn.textContent = "▶ Play"; playBtn.classList.remove("playing");
         return;
     }
-    playBtn.textContent = "⏹ Stop";
-    playBtn.classList.add("playing");
-    // Jump to start if at end
+    playBtn.textContent = "⏹ Stop"; playBtn.classList.add("playing");
     if (currentYear >= 2014) { currentYear = 1850; yearSlider.value = 1850; }
 
     playInterval = setInterval(async () => {
@@ -421,10 +429,8 @@ playBtn.addEventListener("click", () => {
             document.getElementById("selectedYear").textContent  = currentYear;
         }
         if (currentYear >= 2014) {
-            clearInterval(playInterval);
-            playInterval = null;
-            playBtn.textContent = "▶ Play";
-            playBtn.classList.remove("playing");
+            clearInterval(playInterval); playInterval = null;
+            playBtn.textContent = "▶ Play"; playBtn.classList.remove("playing");
         }
     }, 120);
 });
@@ -455,7 +461,9 @@ document.querySelectorAll(".exp-btn").forEach(btn => {
 
 // ── Reset ─────────────────────────────────────────────
 document.getElementById("resetBtn").addEventListener("click", () => {
-    svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
+    projection.rotate([0, -20]);
+    projection.scale(baseScale);
+    redrawGlobe();
     d3.selectAll(".country").classed("active", false);
     document.getElementById("selectedCard").style.display = "none";
     selectedCode = null;
@@ -471,17 +479,33 @@ document.getElementById("chartClose").addEventListener("click", () => {
 
 // ── Responsive resize ─────────────────────────────────
 window.addEventListener("resize", () => {
-    const dims = getDims();
-    projection.scale(dims.w / 6.3).translate([dims.w / 2, dims.h / 2]);
-    mapGroup.selectAll("path.country, path.sphere, path.graticule").attr("d", path);
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    baseScale = Math.min(cw, ch) / 2 - 4;
+    projection.scale(baseScale).translate([cw / 2, ch / 2]);
+    svg.attr("width", cw).attr("height", ch).attr("viewBox", `0 0 ${cw} ${ch}`);
+    redrawGlobe();
     if (selectedCode && document.getElementById("chartPanel").classList.contains("visible")) {
         updateChart(selectedCode);
     }
 });
 
 // ── Count display ─────────────────────────────────────
-document.getElementById("point-count").textContent =
-    Object.keys(ISO2_NAMES).length;
+document.getElementById("point-count").textContent = Object.keys(ISO2_NAMES).length;
 
 // ── Boot ──────────────────────────────────────────────
-initMap();
+let initialized = false;
+const ro = new ResizeObserver(entries => {
+    const entry = entries[0];
+    const { width, height } = entry.contentRect;
+    if (width === 0 || height === 0) return;
+
+    if (!initialized) {
+        initialized = true;
+        baseScale = Math.min(width, height) / 2 - 4;
+        projection.scale(baseScale).translate([width / 2, height / 2]);
+        ro.disconnect();
+        initMap();
+    }
+});
+ro.observe(container);
