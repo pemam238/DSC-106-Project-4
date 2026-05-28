@@ -302,12 +302,12 @@ html, body {
 .graticule { fill: none; stroke: var(--graticule); stroke-width: 0.5; }
 
 .country {
-    fill: var(--land);
     stroke: var(--land-border);
     stroke-width: 0.35;
     transition: fill .18s;
     cursor: pointer;
 }
+
 .country:hover  { stroke: #555; stroke-width: 0.8; }
 .country.active { stroke: var(--ink); stroke-width: 1.2; }
 
