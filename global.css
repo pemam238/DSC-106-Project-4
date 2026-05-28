@@ -33,7 +33,7 @@ html, body {
 
 /* ─── Masthead ────────────────────────────────────── */
 .masthead {
-    padding: 22px 28px 0;
+    padding: 12px 28px 0;
 }
 
 .masthead-eyebrow {
@@ -48,12 +48,12 @@ html, body {
 
 .masthead-title {
     font-family: var(--font-display);
-    font-size: clamp(20px, 2.6vw, 32px);
+    font-size: clamp(13px, 1.4vw, 18px);
     font-weight: 700;
     line-height: 1.15;
     color: var(--ink);
     max-width: 700px;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
 }
 .masthead-title em { font-style: italic; font-weight: 400; }
 
@@ -61,7 +61,7 @@ html, body {
     font-family: var(--font-ui);
     font-size: 12px;
     color: var(--ink-muted);
-    margin-bottom: 14px;
+    margin-bottom: 8px;
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
@@ -80,7 +80,7 @@ html, body {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 10px 28px;
+    padding: 6px 28px;
     background: var(--paper-tint);
     border-bottom: 1px solid var(--ink-rule);
     flex-wrap: wrap;
@@ -106,7 +106,7 @@ html, body {
     font-family: var(--font-ui);
     font-size: 11.5px;
     font-weight: 600;
-    padding: 4px 10px;
+    padding: 3px 8px;
     border: 1px solid var(--ink-rule);
     border-radius: 2px;
     background: white;
@@ -133,7 +133,7 @@ html, body {
     font-family: var(--font-ui);
     font-size: 11px;
     font-weight: 600;
-    padding: 3px 10px;
+    padding: 2px 8px;
     border: 1px solid var(--ink-rule);
     border-radius: 2px;
     background: white;
@@ -155,9 +155,11 @@ html, body {
     min-height: 0;
     padding: 16px 28px;
     gap: 20px;
-    max-height: 500px;
+    align-items: flex-start;
+    overflow: hidden;        /* ADD — prevents children from bleeding out */
+    height: calc(100vh - 220px); /* ADD THIS */
 }
-
+}
 /* ─── Sidebar ─────────────────────────────────────── */
 .sidebar {
     width: var(--sidebar-w);
@@ -169,6 +171,7 @@ html, body {
     flex-direction: column;
     gap: 0;
     background: var(--paper);
+    align-self: flex-start; 
 }
 
 .sidebar-lede {
@@ -283,18 +286,28 @@ html, body {
 
 /* ─── Map ─────────────────────────────────────────── */
 #map-container {
-    flex: 1;
     position: relative;
-    overflow: hidden;
     background: var(--ocean);
+    border-radius: 50%;
     border: 1px solid var(--ink-rule);
-    border-radius: 3px;
+    overflow: hidden;
+    align-self: center;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.10), inset 0 0 60px rgba(232,238,244,0.6);
+
+    /* Size the globe to fit the available height, not a fixed pixel value */
+    /* 100% of the layout's height, capped at 580px, never wider than available width */
+    width: min(560px, calc(100vw - var(--sidebar-w) - 80px));
+    aspect-ratio: 1 / 1;
+    flex-shrink: 0;
 }
+The key changes are removing the fixed max-height from .layout (that was the original cap keeping things in check that got lost), adding overflow: hidden to .layout, and sizing the globe using min() so it never exceeds either 580px or the actual available space. The globe will now size itself to fit rather than overflow.
+
+
+You'
 
 #map-svg {
-    width: 100%;
-    height: 100%;
-    cursor: grab;
+
+svg.attr("viewBox", null); 
 }
 #map-svg:active { cursor: grabbing; }
 

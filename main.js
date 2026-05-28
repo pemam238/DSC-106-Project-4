@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────
-   main.js  —  Climate Extreme Weather interactive map
+   main.js  —  Climate Extreme Weather interactive GLOBE
    D3 v7 + TopoJSON
    ───────────────────────────────────────────────────── */
 
@@ -157,18 +157,90 @@ function getDims() {
 }
 let { w, h } = getDims();
 
-const projection = d3.geoNaturalEarth1()
-    .scale(w / 6.3)
-    .translate([w / 2, h / 2]);
+// ── Globe projection ──────────────────────────────────
+let baseScale = Math.min(w, h) / 2 - 4;
+
+const projection = d3.geoOrthographic()
+    .scale(baseScale)
+    .translate([w / 2, h / 2])
+    .clipAngle(90)
+    .rotate([0, -20]);
 
 const path = d3.geoPath().projection(projection);
 
-const zoom = d3.zoom()
-    .scaleExtent([1, 8])
-    .on("zoom", ({ transform }) => mapGroup.attr("transform", transform));
-svg.call(zoom);
+function redrawGlobe() {
+    svg.select("#globe-clip path").attr("d", path);
+    mapGroup.selectAll("path").attr("d", path);
+}
 
+// ── d3.drag() for globe rotation ─────────────────────
+let dragStartRotation = null;
+let dragStartPos      = null;
+let isDragging        = false;
+
+const drag = d3.drag()
+    .on("start", function(event) {
+        isDragging = true;
+        dragStartRotation = projection.rotate().slice();
+        dragStartPos = [event.x, event.y];
+        svg.style("cursor", "grabbing");
+        tooltip.classList.remove("visible");
+    })
+    .on("drag", function(event) {
+        if (!dragStartRotation) return;
+        const dx = event.x - dragStartPos[0];
+        const dy = event.y - dragStartPos[1];
+        const sensitivity = 0.4;
+        projection.rotate([
+            dragStartRotation[0] + dx * sensitivity,
+            dragStartRotation[1] - dy * sensitivity
+        ]);
+        redrawGlobe();
+    })
+    .on("end", function() {
+        isDragging = false;
+        dragStartRotation = null;
+        dragStartPos = null;
+        svg.style("cursor", "grab");
+    });
+
+svg.call(drag);
+svg.style("cursor", "grab");
+
+// ── Scroll-to-zoom ─────────────────────────────────────
+svg.on("wheel", function(event) {
+    event.preventDefault();
+    const currentScale = projection.scale();
+    const minScale = baseScale;
+    const maxScale = baseScale * 6;
+    const delta    = event.deltaY > 0 ? 0.9 : 1.1;
+    const newScale = Math.max(minScale, Math.min(maxScale, currentScale * delta));
+    projection.scale(newScale);
+    redrawGlobe();
+}, { passive: false });
+
+// ── Map group ─────────────────────────────────────────
 const mapGroup = svg.append("g");
+
+// ── ISO numeric → alpha-2 ─────────────────────────────
+const NUM_TO_ALPHA2 = {
+  4:"AF",8:"AL",12:"DZ",24:"AO",32:"AR",36:"AU",40:"AT",31:"AZ",48:"BH",50:"BD",
+  56:"BE",64:"BT",68:"BO",76:"BR",100:"BG",854:"BF",108:"BI",116:"KH",120:"CM",
+  124:"CA",140:"CF",144:"LK",152:"CL",170:"CO",178:"CG",180:"CD",188:"CR",191:"HR",
+  192:"CU",196:"CY",203:"CZ",204:"BJ",208:"DK",214:"DO",218:"EC",818:"EG",222:"SV",
+  226:"GQ",232:"ER",231:"ET",246:"FI",242:"FJ",266:"GA",276:"DE",288:"GH",300:"GR",
+  320:"GT",324:"GN",624:"GW",328:"GY",332:"HT",340:"HN",348:"HU",356:"IN",360:"ID",
+  364:"IR",368:"IQ",372:"IE",376:"IL",380:"IT",388:"JM",400:"JO",392:"JP",404:"KE",
+  408:"KP",410:"KR",414:"KW",398:"KZ",418:"LA",422:"LB",430:"LR",426:"LS",440:"LT",
+  442:"LU",428:"LV",434:"LY",484:"MX",458:"MY",466:"ML",504:"MA",516:"NA",524:"NP",
+  528:"NL",554:"NZ",558:"NI",562:"NE",566:"NG",578:"NO",512:"OM",586:"PK",591:"PA",
+  598:"PG",600:"PY",604:"PE",608:"PH",616:"PL",620:"PT",630:"PR",634:"QA",642:"RO",
+  703:"SK",705:"SI",706:"SO",710:"ZA",724:"ES",729:"SD",740:"SR",752:"SE",
+  756:"CH",760:"SY",762:"TJ",764:"TH",768:"TG",780:"TT",788:"TN",792:"TR",800:"UG",
+  804:"UA",784:"AE",826:"GB",840:"US",858:"UY",860:"UZ",862:"VE",704:"VN",887:"YE",
+  894:"ZM",716:"ZW",646:"RW",686:"SN",694:"SL",807:"MK",498:"MD",508:"MZ",454:"MW",
+  148:"TD",156:"CN",643:"RU",72:"BW",84:"BZ",104:"MM",496:"MN"
+};
 
 // ── Choropleth update ─────────────────────────────────
 function updateChoropleth() {
@@ -182,9 +254,16 @@ function updateChoropleth() {
     });
 }
 
-// ── Init map ──────────────────────────────────────────
+// ── TopoJSON world load ──────────────────────────────
 async function initMap() {
-    console.log("Initializing map...");
+    // FIX: correctly read both width and height from container
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    svg.attr("width", cw).attr("height", ch).attr("viewBox", `0 0 ${cw} ${ch}`);
+
+    baseScale = Math.min(cw, ch) / 2 - 4;
+    projection.scale(baseScale).translate([cw / 2, ch / 2]);
+
     const world = await d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
     worldData = world;
 
@@ -195,6 +274,13 @@ async function initMap() {
         f.properties.alpha2 = alpha2 || null;
     }
 
+    svg.append("defs")
+        .append("clipPath")
+        .attr("id", "globe-clip")
+        .append("path")
+        .datum({ type: "Sphere" })
+        .attr("d", path);
+
     mapGroup.append("path")
         .datum({ type: "Sphere" })
         .attr("class", "sphere")
@@ -203,41 +289,56 @@ async function initMap() {
     mapGroup.append("path")
         .datum(d3.geoGraticule()())
         .attr("class", "graticule")
-        .attr("d", path);
+        .attr("d", path)
+        .attr("clip-path", "url(#globe-clip)");
 
-    mapGroup.append("g")
-        .selectAll("path")
+    const countryGroup = mapGroup.append("g")
+        .attr("clip-path", "url(#globe-clip)");
+
+    countryGroup.selectAll("path")
         .data(features)
         .join("path")
-        .attr("class", "country")
-        .attr("d", path)
-        .attr("fill", noDataColor())
-        .on("mousemove", function(event, d) {
-            const alpha2 = d.properties?.alpha2;
-            const row = alpha2 ? getRow(alpha2, currentYear) : null;
-            const name = alpha2 ? (ISO2_NAMES[alpha2] || alpha2) : "Unknown";
-            const [mx, my] = d3.pointer(event, container);
-            tooltip.classList.add("visible");
-            tooltip.style.left = `${mx + 14}px`;
-            tooltip.style.top  = `${Math.max(0, my - 60)}px`;
-            document.getElementById("tooltip-country").textContent =
-                (alpha2 ? getFlag(alpha2) + "  " : "") + name;
-            document.getElementById("tooltip-value").textContent =
-                row ? `Mean intensity: ${row.mean.toFixed(4)}` : "No data";
-            document.getElementById("tooltip-extra").textContent =
-                row ? `Grid points: ${row.n}` : "";
-        })
-        .on("mouseleave", () => tooltip.classList.remove("visible"))
-        .on("click", function(event, d) {
-            event.stopPropagation();
-            const alpha2 = d.properties?.alpha2;
-            if (!alpha2) return;
-            d3.selectAll(".country").classed("active", false);
-            d3.select(this).classed("active", true);
-            pinCountry(alpha2);
-        });
+            .attr("class", "country")
+            .attr("d", path)
+            .attr("fill", noDataColor())
+            .on("mousemove", function(event, d) {
+                if (isDragging) return;
+                const alpha2 = d.properties?.alpha2;
+                const row  = alpha2 ? getRow(alpha2, currentYear) : null;
+                const name = alpha2 ? (ISO2_NAMES[alpha2] || alpha2) : "Unknown";
 
-    svg.on("click", () => d3.selectAll(".country").classed("active", false));
+                const tx = event.clientX + 14;
+                const ty = event.clientY - 60;
+                const ttW = 160;
+                const left = tx + ttW > window.innerWidth ? event.clientX - ttW - 8 : tx;
+
+                tooltip.classList.add("visible");
+                tooltip.style.left = left + "px";
+                tooltip.style.top  = Math.max(8, ty) + "px";
+
+                document.getElementById("tooltip-country").textContent =
+                    (alpha2 ? getFlag(alpha2) + "  " : "") + name;
+                document.getElementById("tooltip-value").textContent =
+                    row ? `Mean intensity: ${row.mean.toFixed(4)}` : "No data";
+                document.getElementById("tooltip-extra").textContent =
+                    row ? `Grid points: ${row.n}` : "";
+            })
+            .on("mouseleave", () => {
+                if (!isDragging) tooltip.classList.remove("visible");
+            })
+            .on("click", function(event, d) {
+                if (isDragging) return;
+                event.stopPropagation();
+                const alpha2 = d.properties?.alpha2;
+                if (!alpha2) return;
+                d3.selectAll(".country").classed("active", false);
+                d3.select(this).classed("active", true);
+                pinCountry(alpha2);
+            });
+
+    svg.on("click.deselect", () => {
+        if (!isDragging) d3.selectAll(".country").classed("active", false);
+    });
 
     await loadCSV(currentEvent, currentExp);
     updateChoropleth();
@@ -302,14 +403,16 @@ function updateChart(alpha2) {
     const yMax   = d3.max(series, d => d.mean) * 1.05 || 1;
     const yScale = d3.scaleLinear().domain([0, yMax]).range([iH, 0]);
 
-    g.append("path").datum(series).attr("class", "chart-area")
-        .attr("d", d3.area().x(d => xScale(d.year)).y0(iH).y1(d => yScale(d.mean)).curve(d3.curveMonotoneX));
-    g.append("path").datum(series).attr("class", "chart-line")
-        .attr("d", d3.line().x(d => xScale(d.year)).y(d => yScale(d.mean)).curve(d3.curveMonotoneX));
+    const area = d3.area().x(d => xScale(d.year)).y0(iH).y1(d => yScale(d.mean)).curve(d3.curveMonotoneX);
+    const line = d3.line().x(d => xScale(d.year)).y(d => yScale(d.mean)).curve(d3.curveMonotoneX);
+
+    g.append("path").datum(series).attr("class", "chart-area").attr("d", area);
+    g.append("path").datum(series).attr("class", "chart-line").attr("d", line);
 
     g.append("line").attr("class", "chart-year-line")
         .attr("x1", xScale(currentYear)).attr("x2", xScale(currentYear))
         .attr("y1", 0).attr("y2", iH);
+
     g.append("text")
         .attr("x", Math.min(xScale(currentYear) + 3, iW - 30)).attr("y", 10)
         .attr("font-family", "var(--font-ui)").attr("font-size", 9)
@@ -319,10 +422,10 @@ function updateChart(alpha2) {
         .call(d3.axisBottom(xScale).ticks(8).tickFormat(d3.format("d")));
     g.append("g").attr("class", "chart-axis")
         .call(d3.axisLeft(yScale).ticks(4).tickFormat(d3.format(".2f")));
-    g.append("text").attr("transform", "rotate(-90)")
-        .attr("x", -iH / 2).attr("y", -40).attr("text-anchor", "middle")
-        .attr("font-family", "var(--font-ui)").attr("font-size", 9)
-        .attr("fill", "var(--ink-muted)").text("Intensity (mean)");
+
+    g.append("text").attr("transform", "rotate(-90)").attr("x", -iH / 2).attr("y", -40)
+        .attr("text-anchor", "middle").attr("font-family", "var(--font-ui)")
+        .attr("font-size", 9).attr("fill", "var(--ink-muted)").text("Intensity (mean)");
 }
 
 // ── Year slider ───────────────────────────────────────
@@ -347,10 +450,12 @@ const playBtn = document.getElementById("playBtn");
 playBtn.addEventListener("click", () => {
     if (playInterval) {
         clearInterval(playInterval); playInterval = null;
-        playBtn.textContent = "▶ Play"; playBtn.classList.remove("playing"); return;
+        playBtn.textContent = "▶ Play"; playBtn.classList.remove("playing");
+        return;
     }
     playBtn.textContent = "⏹ Stop"; playBtn.classList.add("playing");
-    if (currentYear >= 2014) { currentYear = 1850; yearSlider.value = 1850; yearDisplay.textContent = 1850; }
+    if (currentYear >= 2014) { currentYear = 1850; yearSlider.value = 1850; }
+
     playInterval = setInterval(async () => {
         currentYear++; yearSlider.value = currentYear; yearDisplay.textContent = currentYear;
         await loadCSV(currentEvent, currentExp);
@@ -393,7 +498,9 @@ document.querySelectorAll(".exp-btn").forEach(btn => {
 
 // ── Reset ─────────────────────────────────────────────
 document.getElementById("resetBtn").addEventListener("click", () => {
-    svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
+    projection.rotate([0, -20]);
+    projection.scale(baseScale);
+    redrawGlobe();
     d3.selectAll(".country").classed("active", false);
     document.getElementById("selectedCard").style.display = "none";
     selectedCode = null;
@@ -409,15 +516,33 @@ document.getElementById("chartClose").addEventListener("click", () => {
 
 // ── Resize ────────────────────────────────────────────
 window.addEventListener("resize", () => {
-    const dims = getDims();
-    projection.scale(dims.w / 6.3).translate([dims.w / 2, dims.h / 2]);
-    mapGroup.selectAll("path.country, path.sphere, path.graticule").attr("d", path);
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    baseScale = Math.min(cw, ch) / 2 - 4;
+    projection.scale(baseScale).translate([cw / 2, ch / 2]);
+    svg.attr("width", cw).attr("height", ch).attr("viewBox", `0 0 ${cw} ${ch}`);
+    redrawGlobe();
     if (selectedCode && document.getElementById("chartPanel").classList.contains("visible")) {
         updateChart(selectedCode);
     }
 });
 
-// ── Boot ──────────────────────────────────────────────
+// ── Count display ─────────────────────────────────────
 document.getElementById("point-count").textContent = Object.keys(ISO2_NAMES).length;
-console.log("main.js booting...");
-initMap();
+
+// ── Boot ──────────────────────────────────────────────
+let initialized = false;
+const ro = new ResizeObserver(entries => {
+    const entry = entries[0];
+    const { width, height } = entry.contentRect;
+    if (width === 0 || height === 0) return;
+
+    if (!initialized) {
+        initialized = true;
+        baseScale = Math.min(width, height) / 2 - 4;
+        projection.scale(baseScale).translate([width / 2, height / 2]);
+        ro.disconnect();
+        initMap();
+    }
+});
+ro.observe(container);
