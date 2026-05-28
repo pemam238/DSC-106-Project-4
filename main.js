@@ -48,21 +48,45 @@ const ISO2_NAMES = {
   VE:"Venezuela",VN:"Vietnam",YE:"Yemen",ZA:"South Africa",ZM:"Zambia",ZW:"Zimbabwe"
 };
 
+// ── Numeric ISO → alpha-2 ─────────────────────────────
+const NUM_TO_ALPHA2 = {
+  4:"AF",8:"AL",10:"AQ",12:"DZ",24:"AO",31:"AZ",32:"AR",36:"AU",40:"AT",48:"BH",
+  50:"BD",56:"BE",64:"BT",68:"BO",70:"BA",72:"BW",76:"BR",84:"BZ",90:"SB",96:"BN",
+  100:"BG",104:"MM",108:"BI",112:"BY",116:"KH",120:"CM",124:"CA",140:"CF",144:"LK",
+  148:"TD",152:"CL",156:"CN",162:"CX",166:"CC",170:"CO",174:"KM",178:"CG",180:"CD",
+  188:"CR",191:"HR",192:"CU",196:"CY",203:"CZ",204:"BJ",208:"DK",214:"DO",218:"EC",
+  222:"SV",226:"GQ",231:"ET",232:"ER",242:"FJ",246:"FI",250:"FR",260:"TF",262:"DJ",
+  266:"GA",276:"DE",288:"GH",296:"KI",300:"GR",316:"GU",320:"GT",324:"GN",328:"GY",
+  332:"HT",340:"HN",348:"HU",356:"IN",360:"ID",364:"IR",368:"IQ",372:"IE",376:"IL",
+  380:"IT",388:"JM",392:"JP",398:"KZ",400:"JO",404:"KE",408:"KP",410:"KR",414:"KW",
+  417:"KG",418:"LA",422:"LB",426:"LS",428:"LV",430:"LR",434:"LY",440:"LT",442:"LU",
+  450:"MG",454:"MW",458:"MY",462:"MV",466:"ML",478:"MR",480:"MU",484:"MX",496:"MN",
+  498:"MD",504:"MA",508:"MZ",512:"OM",516:"NA",520:"NR",524:"NP",528:"NL",540:"NC",
+  548:"VU",554:"NZ",558:"NI",562:"NE",566:"NG",574:"NF",578:"NO",580:"MP",583:"FM",
+  584:"MH",585:"PW",586:"PK",591:"PA",598:"PG",600:"PY",604:"PE",608:"PH",616:"PL",
+  620:"PT",624:"GW",626:"TL",630:"PR",634:"QA",638:"RE",642:"RO",643:"RU",646:"RW",
+  654:"SH",678:"ST",682:"SA",686:"SN",690:"SC",694:"SL",703:"SK",704:"VN",705:"SI",
+  706:"SO",710:"ZA",716:"ZW",724:"ES",728:"SS",729:"SD",734:"TN",740:"SR",744:"SJ",
+  752:"SE",756:"CH",760:"SY",762:"TJ",764:"TH",768:"TG",776:"TO",780:"TT",784:"AE",
+  788:"TN",792:"TR",795:"TM",798:"TV",800:"UG",804:"UA",807:"MK",818:"EG",826:"GB",
+  834:"TZ",840:"US",854:"BF",858:"UY",860:"UZ",862:"VE",882:"WS",887:"YE",894:"ZM"
+};
+
+// ── Flags ─────────────────────────────────────────────
 function getFlag(code) {
     if (!code || code.length !== 2) return "";
-    const offset = 127397;
-    return String.fromCodePoint(...[...code.toUpperCase()].map(c => c.charCodeAt(0) + offset));
+    return String.fromCodePoint(...[...code.toUpperCase()].map(c => c.charCodeAt(0) + 127397));
 }
 
-// ── Color scale ──────────────────────────────────────
+// ── Color scale ───────────────────────────────────────
 const colorScale = d3.scaleSequential()
     .domain([0, 1])
     .interpolator(d3.interpolateRgb("#f0ebe3", "#c0282d"));
 
 function noDataColor() { return "#d9d4c7"; }
 
-// ── Data loading ─────────────────────────────────────
-const DATA_BASE = "./data/";
+// ── Data loading ──────────────────────────────────────
+const DATA_BASE = "./dataframes/";
 
 function dataKey(event, exp) { return `${event}_${exp}`; }
 
@@ -70,8 +94,10 @@ async function loadCSV(event, exp) {
     const key = dataKey(event, exp);
     if (allData[key]) return;
     const filename = `${event}_${exp}_country_year.csv`;
+    const url = DATA_BASE + filename;
+    console.log(`Loading: ${url}`);
     try {
-        const rows = await d3.csv(DATA_BASE + filename, d => ({
+        const rows = await d3.csv(url, d => ({
             code: d.country_code,
             year: +d.year,
             mean: +d.intensity_mean,
@@ -81,16 +107,19 @@ async function loadCSV(event, exp) {
         }));
         const nested = new Map();
         for (const r of rows) {
+            if (!r.code || isNaN(r.year) || isNaN(r.mean)) continue;
             if (!nested.has(r.code)) nested.set(r.code, new Map());
             nested.get(r.code).set(r.year, r);
         }
         allData[key] = nested;
+        console.log(`Loaded ${rows.length} rows for ${key}. Countries: ${nested.size}`);
     } catch(e) {
-        console.warn(`Could not load ${filename}:`, e.message);
+        console.error(`Failed to load ${url}:`, e);
         allData[key] = new Map();
     }
 }
 
+// ── Lookup helpers ────────────────────────────────────
 function getRow(code, year) {
     const nested = allData[dataKey(currentEvent, currentExp)];
     if (!nested) return null;
@@ -118,7 +147,7 @@ function computeDomain() {
     return [0, max || 1];
 }
 
-// ── DOM refs ──────────────────────────────────────────
+// ── Map setup ─────────────────────────────────────────
 const container = document.getElementById("map-container");
 const svg       = d3.select("#map-svg");
 const tooltip   = document.getElementById("tooltip");
@@ -313,6 +342,19 @@ async function initMap() {
 
     await loadCSV(currentEvent, currentExp);
     updateChoropleth();
+
+    // ── Debug: check code matching ──
+    const nested = allData[dataKey(currentEvent, currentExp)];
+    const csvCodes = new Set(nested.keys());
+    const mapCodes = new Set();
+    mapGroup.selectAll(".country").each(function(d) {
+        if (d.properties?.alpha2) mapCodes.add(d.properties.alpha2);
+    });
+    const matched   = [...csvCodes].filter(c => mapCodes.has(c));
+    const unmatched = [...csvCodes].filter(c => !mapCodes.has(c));
+    console.log(`CSV codes: ${csvCodes.size} | Map codes: ${mapCodes.size} | Matched: ${matched.length}`);
+    console.log("Unmatched CSV codes (in CSV but not on map):", unmatched.join(", "));
+    console.log("Map codes not in CSV:", [...mapCodes].filter(c => !csvCodes.has(c)).join(", "));
 }
 
 // ── Pin country ───────────────────────────────────────
@@ -320,25 +362,22 @@ function pinCountry(alpha2) {
     selectedCode = alpha2;
     const name = ISO2_NAMES[alpha2] || alpha2;
     const row  = getRow(alpha2, currentYear);
-
     document.getElementById("selectedFlag").textContent  = getFlag(alpha2);
     document.getElementById("selectedName").textContent  = name;
     document.getElementById("selectedValue").textContent = row ? row.mean.toFixed(4) : "N/A";
     document.getElementById("selectedYear").textContent  = currentYear;
     document.getElementById("selectedCode").textContent  = alpha2;
     document.getElementById("selectedCard").style.display = "block";
-
     updateChart(alpha2);
 }
 
-// ── Historical chart ─────────────────────────────────
+// ── Historical chart ──────────────────────────────────
 function updateChart(alpha2) {
     const name     = ISO2_NAMES[alpha2] || alpha2;
     const series   = getCountrySeries(alpha2);
     const panel    = document.getElementById("chartPanel");
     const chartSvg = d3.select("#chart-svg");
     chartSvg.selectAll("*").remove();
-
     document.getElementById("chartTitle").textContent =
         `${getFlag(alpha2)} ${name} — ${currentEvent} intensity (${currentExp})`;
     panel.classList.add("visible");
@@ -418,9 +457,7 @@ playBtn.addEventListener("click", () => {
     if (currentYear >= 2014) { currentYear = 1850; yearSlider.value = 1850; }
 
     playInterval = setInterval(async () => {
-        currentYear++;
-        yearSlider.value = currentYear;
-        yearDisplay.textContent = currentYear;
+        currentYear++; yearSlider.value = currentYear; yearDisplay.textContent = currentYear;
         await loadCSV(currentEvent, currentExp);
         updateChoropleth();
         if (selectedCode) {
@@ -469,7 +506,7 @@ document.getElementById("resetBtn").addEventListener("click", () => {
     selectedCode = null;
 });
 
-// ── Chart close ────────────────────────────────────────
+// ── Chart close ───────────────────────────────────────
 document.getElementById("chartClose").addEventListener("click", () => {
     document.getElementById("chartPanel").classList.remove("visible");
     d3.selectAll(".country").classed("active", false);
@@ -477,7 +514,7 @@ document.getElementById("chartClose").addEventListener("click", () => {
     document.getElementById("selectedCard").style.display = "none";
 });
 
-// ── Responsive resize ─────────────────────────────────
+// ── Resize ────────────────────────────────────────────
 window.addEventListener("resize", () => {
     const cw = container.clientWidth;
     const ch = container.clientHeight;
