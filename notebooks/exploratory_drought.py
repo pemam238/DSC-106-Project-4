@@ -174,8 +174,8 @@ slope_change    = (modern_slopes - baseline_slopes).rename("slope_change")
 
 print("\n── Slope Change (modern trend minus baseline trend) ──")
 print(slope_change.round(6).to_string())
-print("\nPositive = trend toward drier in modern period")
-print("Negative = trend toward wetter in modern period")
+print("\nPositive = trend toward wetter in modern period")
+print("Negative = trend toward drier in modern period")
 
 # ── 7. Summary table ──────────────────────────────────────────────────────────
 
