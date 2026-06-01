@@ -55,7 +55,7 @@ heat_spi = (
 
 fig, ax = plt.subplots(figsize=(14, 5))
 sns.heatmap(heat_spi, center=0, cmap="RdBu_r", ax=ax)
-ax.set_title("Mean SPI by Continent and Decade\n(blue = wetter, red = drier)")
+ax.set_title("Mean SPI by Continent and Decade\n(blue = drier, red = wetter)")
 plt.tight_layout()
 plt.savefig("heatmap_spi_raw.png", dpi=150)
 plt.show()
@@ -164,7 +164,7 @@ def get_slopes(data, year_min, year_max=None):
     return (
         subset
         .groupby("continent")
-        .apply(lambda g: linregress(g["year"], g["mean_spi"]).slope)
+        .apply(lambda g: linregress(g["year"], g["mean_spi"]).slope, include_groups=False)
         .rename("slope")
     )
 
