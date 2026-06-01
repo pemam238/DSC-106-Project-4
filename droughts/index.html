@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Uneven Earth — Global Drought Shifts</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400&family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,200&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="global.css" />
+  <link rel="stylesheet" href="droughts/drought.css" />
+</head>
+<body>
+
+  <!-- ── HERO ─────────────────────────────────────────────────────────── -->
+  <section class="hero" id="hero">
+    <div class="hero-noise"></div>
+    <div class="hero-content">
+      <p class="hero-label">A Data Story · 1850–2014</p>
+      <h1 class="hero-title">
+        The<br/>
+        <em>Uneven</em><br/>
+        Earth
+      </h1>
+      <p class="hero-sub">
+        Climate change is not making drought worse everywhere equally.<br/>
+        It is reshaping drought risk — intensifying drying in the regions<br/>
+        that can least afford it.
+      </p>
+      <div class="hero-scroll-cue">
+        <span>Scroll to explore</span>
+        <div class="scroll-line"></div>
+      </div>
+    </div>
+    <div class="hero-bg-text">DROUGHT</div>
+  </section>
+
+  <!-- ── INTRO ─────────────────────────────────────────────────────────── -->
+  <section class="intro reveal-section" id="intro">
+    <div class="container">
+      <div class="intro-grid">
+        <div class="intro-number">01</div>
+        <div class="intro-text">
+          <h2>Drought has always been natural.</h2>
+          <p>
+            Every continent has experienced drought since long before industrialisation.
+            The Standardized Precipitation Index (SPI) measures how wet or dry a region
+            is relative to its own historical average — zero is normal, negative is drier,
+            positive is wetter.
+          </p>
+          <p>
+            But over 160 years of climate records, the geography of drought is shifting.
+            The question is not <em>whether</em> drought exists — it is <em>where</em> it
+            is going, and how fast.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CRACKED EARTH VISUALIZATION ──────────────────────────────────── -->
+  <section class="viz-section" id="viz-plates">
+    <div class="container">
+      <div class="section-header reveal-section">
+        <div class="section-num">02</div>
+        <h2>Continental Drought Plates</h2>
+        <p class="section-desc">
+          Each plate represents a continent. <strong>Color</strong> shows the shift in average moisture
+          (SPI change, baseline 1850–1949 vs modern 1990–2014).
+          <strong>Crack width</strong> encodes drought frequency change.
+          <strong>Crack branching</strong> reflects variability change.
+        </p>
+      </div>
+      <div class="plates-grid" id="plates-grid">
+        <!-- filled by JS -->
+      </div>
+      <div class="legend reveal-section">
+        <div class="legend-item">
+          <div class="legend-swatch swatch-dry"></div>
+          <span>Drying (negative SPI shift)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-swatch swatch-wet"></div>
+          <span>Wetting (positive SPI shift)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-crack"></div>
+          <span>Drought frequency increase</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── STORY: SOUTH AMERICA ──────────────────────────────────────────── -->
+  <section class="story-section story-dry reveal-section" id="story-sa">
+    <div class="container story-grid">
+      <div class="story-visual">
+        <svg id="svg-sa" viewBox="0 0 300 400" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+      <div class="story-text">
+        <p class="story-region-label">South America</p>
+        <h2>The Clearest Signal</h2>
+        <div class="stat-row">
+          <div class="stat">
+            <span class="stat-val">−0.18</span>
+            <span class="stat-desc">SPI change<br/><em>drying</em></span>
+          </div>
+          <div class="stat">
+            <span class="stat-val">+5.1pp</span>
+            <span class="stat-desc">Drought frequency<br/><em>increase</em></span>
+          </div>
+        </div>
+        <p>
+          South America is the only continent that is simultaneously drying in mean SPI,
+          increasing in drought frequency, and continuing that trend over time.
+        </p>
+        <p>
+          The Brazilian cerrado and Argentine pampas — among the world's most productive
+          agricultural zones — sit at the centre of this signal. When the drought pattern
+          that farmers planned for is no longer the drought they face, adaptation
+          becomes nearly impossible.
+        </p>
+        <blockquote>
+          "The risk is not just drought. It is the disappearance of predictability."
+        </blockquote>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── STORY: AFRICA ──────────────────────────────────────────────────── -->
+  <section class="story-section story-dry reveal-section" id="story-af">
+    <div class="container story-grid story-grid-reverse">
+      <div class="story-visual">
+        <svg id="svg-af" viewBox="0 0 300 400" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+      <div class="story-text">
+        <p class="story-region-label">Africa</p>
+        <h2>Smaller Signal,<br/>Higher Stakes</h2>
+        <div class="stat-row">
+          <div class="stat">
+            <span class="stat-val">−0.02</span>
+            <span class="stat-desc">SPI change<br/><em>drying</em></span>
+          </div>
+          <div class="stat">
+            <span class="stat-val">+2.9pp</span>
+            <span class="stat-desc">Drought frequency<br/><em>increase</em></span>
+          </div>
+        </div>
+        <p>
+          Africa's drying signal is more modest than South America's in magnitude,
+          but the human stakes are disproportionately high. Much of sub-Saharan agriculture
+          is rain-fed and operates with minimal buffer against seasonal disruption.
+        </p>
+        <p>
+          Even a small upward shift in drought frequency — 2.9 percentage points — translates
+          into meaningfully more years where crops fail and food systems come under stress.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── STORY: ASIA ────────────────────────────────────────────────────── -->
+  <section class="story-section story-wet reveal-section" id="story-as">
+    <div class="container story-grid">
+      <div class="story-visual">
+        <svg id="svg-as" viewBox="0 0 300 400" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+      <div class="story-text">
+        <p class="story-region-label">Asia</p>
+        <h2>Wetter, But Not Safer</h2>
+        <div class="stat-row">
+          <div class="stat">
+            <span class="stat-val">+0.24</span>
+            <span class="stat-desc">SPI change<br/><em>wetting</em></span>
+          </div>
+          <div class="stat">
+            <span class="stat-val">+0.98pp</span>
+            <span class="stat-desc">Variability<br/><em>increase</em></span>
+          </div>
+        </div>
+        <p>
+          Asia's average SPI has increased substantially in the modern period — wetter
+          overall. Yet variability has also increased, meaning the swings between wet
+          and dry years are growing wider.
+        </p>
+        <p>
+          Agriculture needs predictability more than it needs rainfall. A wetter average
+          with higher variability can still devastate crop calendars calibrated to
+          expected seasonal patterns.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CONCLUSION ─────────────────────────────────────────────────────── -->
+  <section class="conclusion reveal-section" id="conclusion">
+    <div class="container">
+      <div class="conclusion-inner">
+        <div class="conclusion-num">04</div>
+        <h2>What the data supports</h2>
+        <div class="conclusion-points">
+          <div class="conclusion-point">
+            <div class="point-line point-dry"></div>
+            <p>South America and Africa show consistent drying signals and rising drought frequency — the clearest threat to agricultural stability.</p>
+          </div>
+          <div class="conclusion-point">
+            <div class="point-line point-wet"></div>
+            <p>Asia, Europe, and Antarctica are trending wetter on average, but several show increasing variability — instability by another name.</p>
+          </div>
+          <div class="conclusion-point">
+            <div class="point-line point-neutral"></div>
+            <p>The dominant pattern is not global drying. It is regional divergence — the redistribution of drought risk across a warming planet.</p>
+          </div>
+        </div>
+        <p class="conclusion-caveat">
+          These visualisations use CMIP6 historical climate model output (GISS-E2-1-G).
+          Baseline: 1850–1949. Modern period: 1990–2014.
+          SPI-12 computed per grid cell; aggregated by continent.
+          Correlation with warming trends does not establish causation.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FOOTER ─────────────────────────────────────────────────────────── -->
+  <footer class="site-footer">
+    <div class="container">
+      <p>Data: CMIP6 / GISS-E2-1-G historical experiment · Analysis: SPI-12</p>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+  <script src="droughts/global.js"></script>
+</body>
+</html>
